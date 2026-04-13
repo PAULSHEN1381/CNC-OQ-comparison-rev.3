@@ -1,0 +1,8 @@
+cat > requirements.txt << 'EOF'
+streamlit
+pandas
+matplotlib
+scipy
+openpyxl
+numpy
+EOF
