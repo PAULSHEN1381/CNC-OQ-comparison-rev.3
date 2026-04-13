@@ -111,11 +111,6 @@ def add_custom_css():
         50% { opacity: 0.5; }
     }
     
-    @keyframes bounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
-    }
-    
     .animate-fade-in-up {
         animation: fadeInUp 0.6s cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
     }
@@ -174,10 +169,6 @@ def add_custom_css():
     .stButton > button:hover {
         transform: translateY(-2px) !important;
         box-shadow: 0 4px 12px rgba(26,42,240,0.3) !important;
-    }
-    
-    .success-banner {
-        animation: bounce 0.5s ease-out;
     }
     
     .chart-container {
@@ -263,18 +254,17 @@ def display_animated_chart(img_bytes, title, chart_index=0):
     st.image(img_bytes, use_container_width=True)
 
 
-def show_success_animation():
-    """Display success animation"""
+def show_completion_message():
+    """Display completion message"""
     st.markdown("""
-    <div class="success-banner" style="
+    <div style="
         background: linear-gradient(135deg, #34C759 0%, #28A745 100%);
         border-radius: 12px;
-        padding: 20px;
+        padding: 15px;
         text-align: center;
         margin: 20px 0;
     ">
-        <div style="font-size: 48px; margin-bottom: 10px;">✅</div>
-        <div style="color: white; font-size: 18px; font-weight: bold;">Analysis Completed Successfully!</div>
+        <div style="color: white; font-size: 16px; font-weight: bold;">✅ Analysis Completed Successfully!</div>
     </div>
     """, unsafe_allow_html=True)
     time.sleep(0.3)
@@ -1059,7 +1049,6 @@ def main():
             options=["Slow", "Normal", "Fast"],
             value="Normal"
         )
-        enable_confetti = st.checkbox("Show Celebration Effect", value=True)
         
         speed_multiplier = {"Slow": 0.7, "Normal": 1.0, "Fast": 1.5}[animation_speed]
         
@@ -1108,19 +1097,6 @@ def main():
             
             factory1_name = extract_factory_name(name1)
             factory2_name = extract_factory_name(name2)
-            
-            # Progress stages
-            stages = [
-                "Loading Factory A data",
-                "Loading Factory B data",
-                "Processing machine data",
-                "Analyzing machine ages",
-                "Calculating spindle runout",
-                "Processing velocity data",
-                "Analyzing acceleration",
-                "Generating squareness profiles",
-                "Preparing final results"
-            ]
             
             # Show progress bar for data loading
             progress_bar = st.progress(0)
@@ -1215,10 +1191,8 @@ def main():
                 
                 st.markdown("---")
             
-            # Success animation
-            if enable_confetti:
-                st.balloons()
-            show_success_animation()
+            # Show completion message (without balloons)
+            show_completion_message()
             
         except Exception as e:
             loading_placeholder.empty()
