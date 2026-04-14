@@ -236,11 +236,9 @@ def load_excel_data(file_content, factory_name, read_mode='default'):
 
 def extract_spindle_runout_universal(df, position='near'):
     """
-    修改版：除了返回值，还返回详细的 DataFrame 以供 Debug
+    修改判断逻辑：大于 0.9 则除以 1000（修复值为 1 的边界情况）
     """
     values = []
-    debug_records = []
-    
     position_patterns = [r'@5mm', r'@5\s*mm', r'5mm', r'5\s*mm', r'near'] if position == 'near' else [r'@300mm', r'@300\s*mm', r'300mm', r'@150mm', r'150mm', r'far']
     exclude_patterns = [r'@300', r'300mm', r'150mm', r'@150', r'far'] if position == 'near' else [r'@5mm', r'5mm', r'near']
     
@@ -258,7 +256,6 @@ def extract_spindle_runout_universal(df, position='near'):
         
         if len(valid_indices) == 0: continue
         
-        # 判断列级别是否需要除以 1000
         col_needs_div1000 = any(x in col_str for x in ['[µm]', '[μm]', 'micron', 'um]']) or ('mm' not in col_str)
         
         for idx in valid_indices:
@@ -268,28 +265,95 @@ def extract_spindle_runout_universal(df, position='near'):
             if col_needs_div1000:
                 converted_val = original_val / 1000
             
-            # 智能纠错
-            if converted_val > 1:
+            # 智能纠错：如果输入值 > 0.9，判定为是以 um 填写的
+            if converted_val > 0.9:
                 converted_val = converted_val / 1000
                 
             values.append(converted_val)
             
-            # 收集 Debug 记录
-            machine_model = df.loc[idx, 'Machine Model'] if 'Machine Model' in df.columns else 'N/A'
-            cnc_op = df.loc[idx, 'CNC OP'] if 'CNC OP' in df.columns else 'N/A'
+    return values
+
+
+# ==========================================
+# Comprehensive Grade A Rate Calculator
+# ==========================================
+
+def calculate_factory_grade_a_rate(df, factory_name):
+    """
+    计算该工厂所有机台中，综合满足 Grade A 的机台占比。
+    如果一台机器同时通过了 Runout, Vibration, Squareness 的 Grade A 标准，才算 1 台 Grade A。
+    """
+    total_machines = len(df)
+    if total_machines == 0: return 0, 0
+    
+    grade_a_count = 0
+    
+    # 1. 找出包含对应数据的列名
+    runout_cols_near = []
+    runout_cols_far = []
+    
+    for col in df.columns:
+        col_str = str(col).lower()
+        if 'runout' in col_str or '跳动' in col_str:
+            if any(re.search(p, col_str, re.IGNORECASE) for p in [r'@5mm', r'5mm', r'near']):
+                runout_cols_near.append(col)
+            elif ('spindle nose' in col_str or '主軸' in col_str) and not any(re.search(p, col_str, re.IGNORECASE) for p in [r'@300', r'150', r'far']):
+                runout_cols_near.append(col)
+            if any(re.search(p, col_str, re.IGNORECASE) for p in [r'@300mm', r'300mm', r'@150mm', r'150mm', r'far']):
+                runout_cols_far.append(col)
+                
+    vib_cols = [c for c in df.columns if ('velocity' in str(c).lower() or '速度' in str(c)) and ('spindle' in str(c).lower() or '主轴' in str(c))]
+    
+    sq_cols_xy = [c for c in df.columns if ('squareness' in str(c).lower() or '垂直度' in str(c)) and ('XY' in str(c) or 'YX' in str(c))]
+    sq_cols_yz = [c for c in df.columns if ('squareness' in str(c).lower() or '垂直度' in str(c)) and ('YZ' in str(c) or 'ZY' in str(c))]
+    sq_cols_zx = [c for c in df.columns if ('squareness' in str(c).lower() or '垂直度' in str(c)) and ('ZX' in str(c) or 'XZ' in str(c))]
+    
+    for idx, row in df.iterrows():
+        is_grade_a = True
+        
+        # Check Runout
+        for c in runout_cols_near:
+            v = pd.to_numeric(row[c], errors='coerce')
+            if pd.notna(v):
+                col_str = str(c).lower()
+                if any(x in col_str for x in ['[µm]', '[μm]', 'micron', 'um]']) or ('mm' not in col_str): v /= 1000
+                if v > 0.9: v /= 1000
+                if v * 1000 > 6.0: is_grade_a = False
+        
+        for c in runout_cols_far:
+            v = pd.to_numeric(row[c], errors='coerce')
+            if pd.notna(v):
+                col_str = str(c).lower()
+                if any(x in col_str for x in ['[µm]', '[μm]', 'micron', 'um]']) or ('mm' not in col_str): v /= 1000
+                if v > 0.9: v /= 1000
+                if v * 1000 > 30.0: is_grade_a = False
+                
+        # Check Vibration
+        for c in vib_cols:
+            v = pd.to_numeric(row[c], errors='coerce')
+            if pd.notna(v) and v > 1.1: is_grade_a = False
             
-            debug_records.append({
-                'Position': 'Near End' if position == 'near' else 'Far End',
-                'Column Matched': col,
-                'Machine Model': machine_model,
-                'Station': cnc_op,
-                'Original Value': original_val,
-                'Converted Value (mm)': converted_val,
-                'Converted Value (μm)': converted_val * 1000
-            })
+        # Check Squareness
+        for c in sq_cols_xy:
+            v = pd.to_numeric(row[c], errors='coerce')
+            if pd.notna(v):
+                if v < 1: v *= 1000
+                if v > 16.0: is_grade_a = False
+        for c in sq_cols_yz:
+            v = pd.to_numeric(row[c], errors='coerce')
+            if pd.notna(v):
+                if v < 1: v *= 1000
+                if v > 20.0: is_grade_a = False
+        for c in sq_cols_zx:
+            v = pd.to_numeric(row[c], errors='coerce')
+            if pd.notna(v):
+                if v < 1: v *= 1000
+                if v > 20.0: is_grade_a = False
+                
+        if is_grade_a:
+            grade_a_count += 1
             
-    debug_df = pd.DataFrame(debug_records)
-    return values, debug_df
+    return grade_a_count, total_machines
 
 
 # ==========================================
@@ -329,10 +393,10 @@ def generate_executive_summary(df1, df2, name1, name2):
                     st_data[station] = np.mean(vals)
         return st_data
 
-    near1, _ = extract_spindle_runout_universal(df1, 'near')
-    near2, _ = extract_spindle_runout_universal(df2, 'near')
-    far1, _ = extract_spindle_runout_universal(df1, 'far')
-    far2, _ = extract_spindle_runout_universal(df2, 'far')
+    near1 = extract_spindle_runout_universal(df1, 'near')
+    near2 = extract_spindle_runout_universal(df2, 'near')
+    far1 = extract_spindle_runout_universal(df1, 'far')
+    far2 = extract_spindle_runout_universal(df2, 'far')
 
     def check_runout(near_data, far_data):
         near_max = max(near_data) * 1000 if near_data else 0
@@ -586,10 +650,10 @@ def compare_machine_age(df1, df2, name1, name2):
     return fig_to_bytes(fig), None
 
 def compare_spindle_runout(df1, df2, name1, name2):
-    near1, debug_near1 = extract_spindle_runout_universal(df1, 'near')
-    near2, debug_near2 = extract_spindle_runout_universal(df2, 'near')
-    far1, debug_far1 = extract_spindle_runout_universal(df1, 'far')
-    far2, debug_far2 = extract_spindle_runout_universal(df2, 'far')
+    near1 = extract_spindle_runout_universal(df1, 'near')
+    near2 = extract_spindle_runout_universal(df2, 'near')
+    far1 = extract_spindle_runout_universal(df1, 'far')
+    far2 = extract_spindle_runout_universal(df2, 'far')
     
     USL_NEAR_MM = 0.006
     USL_FAR_MM = 0.030
@@ -615,24 +679,7 @@ def compare_spindle_runout(df1, df2, name1, name2):
     fig.suptitle(f'Spindle Runout Comparison\n{name1} vs {name2}', fontsize=14, fontweight='bold', color='#333')
     plt.tight_layout()
     
-    # 汇总 Debug Dataframes
-    debug_dfs = []
-    if not debug_near1.empty:
-        debug_near1.insert(0, 'Factory', name1)
-        debug_dfs.append(debug_near1)
-    if not debug_near2.empty:
-        debug_near2.insert(0, 'Factory', name2)
-        debug_dfs.append(debug_near2)
-    if not debug_far1.empty:
-        debug_far1.insert(0, 'Factory', name1)
-        debug_dfs.append(debug_far1)
-    if not debug_far2.empty:
-        debug_far2.insert(0, 'Factory', name2)
-        debug_dfs.append(debug_far2)
-        
-    combined_debug_df = pd.concat(debug_dfs, ignore_index=True) if debug_dfs else pd.DataFrame()
-    
-    return fig_to_bytes(fig), combined_debug_df
+    return fig_to_bytes(fig), None
 
 def _plot_runout_distribution(ax, data1, data2, name1, name2, usl_mm, title):
     def calc_stats(data, label):
@@ -991,15 +1038,27 @@ def main():
             status_text.empty()
             
             st.markdown("## 📊 Data Overview")
+            
+            # --- New Data Overview Metrics ---
             cnc_col1, cnc_col2 = get_cnc_column_name(df1), get_cnc_column_name(df2)
             stations1 = int(df1[cnc_col1].nunique()) if cnc_col1 else 0
             stations2 = int(df2[cnc_col2].nunique()) if cnc_col2 else 0
             
+            ga_count1, total_mac1 = calculate_factory_grade_a_rate(df1, factory1_name)
+            ga_count2, total_mac2 = calculate_factory_grade_a_rate(df2, factory2_name)
+            
+            ga_rate1 = (ga_count1 / total_mac1 * 100) if total_mac1 > 0 else 0
+            ga_rate2 = (ga_count2 / total_mac2 * 100) if total_mac2 > 0 else 0
+            
             metric_cols = st.columns(4)
-            with metric_cols[0]: display_animated_metric(f"Factory {factory1_name} - Records", f"{len(df1)}", animation_delay=0)
-            with metric_cols[1]: display_animated_metric(f"Factory {factory1_name} - CNC Stations", f"{stations1}", animation_delay=0.1)
-            with metric_cols[2]: display_animated_metric(f"Factory {factory2_name} - Records", f"{len(df2)}", animation_delay=0.2)
-            with metric_cols[3]: display_animated_metric(f"Factory {factory2_name} - CNC Stations", f"{stations2}", animation_delay=0.3)
+            with metric_cols[0]: 
+                display_animated_metric(f"Factory {factory1_name} - CNC Stations", f"{stations1}", animation_delay=0)
+            with metric_cols[1]: 
+                display_animated_metric(f"Factory {factory1_name} - Grade A Rate", f"{ga_rate1:.1f}%", f"{ga_count1} / {total_mac1} machines", animation_delay=0.1)
+            with metric_cols[2]: 
+                display_animated_metric(f"Factory {factory2_name} - CNC Stations", f"{stations2}", animation_delay=0.2)
+            with metric_cols[3]: 
+                display_animated_metric(f"Factory {factory2_name} - Grade A Rate", f"{ga_rate2:.1f}%", f"{ga_count2} / {total_mac2} machines", animation_delay=0.3)
             
             # --- Render Executive Summary ---
             comp_sums, insight_sums = generate_executive_summary(df1, df2, factory1_name, factory2_name)
@@ -1034,7 +1093,7 @@ def main():
             chart_sections = [
                 ("Machine Type Count Comparison", compare_machine_count, "📋 View Detailed Machine Models per Station"),
                 ("Machine Age Comparison", compare_machine_age, None),
-                ("Spindle Runout Comparison", compare_spindle_runout, "📋 View Runout Extracted Data (Debug)"),
+                ("Spindle Runout Comparison", compare_spindle_runout, None),
                 ("Spindle Velocity Comparison", compare_spindle_velocity, None),
                 ("Spindle Acceleration Comparison", compare_spindle_acceleration, None),
                 ("Marble Squareness Comparison", compare_marble_squareness_combined, None)
