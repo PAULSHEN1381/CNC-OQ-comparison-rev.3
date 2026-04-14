@@ -1,5 +1,5 @@
 # file name: app_streamlit_animated.py
-#CNC Precision Comparison Analysis System - Streamlit Version with Animations
+# Factory Machine Tool Precision Comparison Analysis System - Streamlit Version with Animations
 
 import streamlit as st
 import pandas as pd
@@ -29,7 +29,7 @@ st.set_page_config(
 # Color Theme: Pastel / Macaron (浅色半透明主题)
 # ==========================================
 THEME_BLUE = '#9BB0E2'    # 柔和长春花蓝 (Factory A)
-THEME_PURPLE = '#CDB4DB'  # 柔和丁香紫 / 浅紫 (Factory B) - 新增！
+THEME_PURPLE = '#CDB4DB'  # 柔和丁香紫 / 浅紫 (Factory B)
 THEME_GREEN = '#A2D5AB'   # 柔和薄荷绿 (用于 Target / Grade A 标准线)
 THEME_ORANGE = '#F6B79D'  # 柔和蜜桃粉橘 (用于 Grade B 标准线)
 THEME_RED = '#F4A4A4'     # 柔和珊瑚红 (用于 USL 规格上限)
@@ -48,48 +48,31 @@ plt.rcParams['axes.unicode_minus'] = False
 # ==========================================
 
 def add_custom_css():
-    """Add custom CSS animations with updated pastel colors"""
     st.markdown("""
     <style>
     @keyframes fadeInUp {
         from { opacity: 0; transform: translateY(30px); }
         to { opacity: 1; transform: translateY(0); }
     }
-    
     @keyframes fadeInLeft {
         from { opacity: 0; transform: translateX(-30px); }
         to { opacity: 1; transform: translateX(0); }
     }
-    
     @keyframes fadeInRight {
         from { opacity: 0; transform: translateX(30px); }
         to { opacity: 1; transform: translateX(0); }
     }
-    
-    @keyframes scaleIn {
-        from { opacity: 0; transform: scale(0.9); }
-        to { opacity: 1; transform: scale(1); }
-    }
-    
     @keyframes shimmer {
         0% { background-position: -1000px 0; }
         100% { background-position: 1000px 0; }
     }
-    
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
-    
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-    
     .animate-fade-in-up { animation: fadeInUp 0.6s cubic-bezier(0.2, 0.8, 0.4, 1) forwards; }
     .animate-fade-in-left { animation: fadeInLeft 0.5s ease-out forwards; }
     .animate-fade-in-right { animation: fadeInRight 0.5s ease-out forwards; }
-    .animate-scale-in { animation: scaleIn 0.4s ease-out forwards; }
     
     .shimmer-loading {
         background: linear-gradient(90deg, #f8f9fa 25%, #e9ecef 50%, #f8f9fa 75%);
@@ -97,19 +80,15 @@ def add_custom_css():
         animation: shimmer 1.5s infinite;
         border-radius: 12px;
     }
-    
     .spinner {
         width: 50px;
         height: 50px;
         border: 3px solid #f0f2f5;
-        border-top: 3px solid #9BB0E2; /* Pastel Blue */
+        border-top: 3px solid #9BB0E2; 
         border-radius: 50%;
         animation: spin 1s linear infinite;
         margin: 20px auto;
     }
-    
-    .pulse-animation { animation: pulse 2s ease-in-out infinite; }
-    
     .metric-card {
         background: white;
         border-radius: 16px;
@@ -118,33 +97,22 @@ def add_custom_css():
         text-align: center;
         transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
-    
     .metric-card:hover {
         transform: translateY(-5px);
-        box-shadow: 0 8px 20px rgba(205, 180, 219, 0.2); /* Soft purple glow */
+        box-shadow: 0 8px 20px rgba(205, 180, 219, 0.2); 
     }
-    
-    .stButton > button {
-        transition: all 0.3s ease !important;
-    }
-    
+    .stButton > button { transition: all 0.3s ease !important; }
     .stButton > button:hover {
         transform: translateY(-2px) !important;
         box-shadow: 0 4px 12px rgba(155, 176, 226, 0.4) !important;
     }
+    .chart-container { animation: fadeInUp 0.6s ease-out; }
     
-    .chart-container {
-        animation: fadeInUp 0.6s ease-out;
-    }
-    
-    /* Progress bar animation (Pastel Gradient: Blue to Purple) */
     .stProgress > div > div {
         background: linear-gradient(90deg, #9BB0E2, #CDB4DB, #9BB0E2);
         background-size: 200% 100%;
         animation: shimmer 2s infinite;
     }
-    
-    /* Custom scrollbar */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
     ::-webkit-scrollbar-thumb { background: #cbd0d6; border-radius: 10px; }
@@ -152,60 +120,31 @@ def add_custom_css():
     </style>
     """, unsafe_allow_html=True)
 
-
-# ==========================================
-# Animated Components
-# ==========================================
-
 def show_loading_spinner(message="Loading..."):
-    spinner_html = f"""
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px;">
-        <div class="spinner"></div>
-        <p style="margin-top: 20px; color: #888; font-size: 14px;">{message}</p>
-    </div>
-    """
+    spinner_html = f"""<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px;">
+        <div class="spinner"></div><p style="margin-top: 20px; color: #888; font-size: 14px;">{message}</p></div>"""
     return st.markdown(spinner_html, unsafe_allow_html=True)
 
 def show_shimmer_loading(height=400):
-    shimmer_html = f"""
-    <div class="shimmer-loading" style="height: {height}px; width: 100%; border-radius: 12px;">
-    </div>
-    """
-    return st.markdown(shimmer_html, unsafe_allow_html=True)
+    return st.markdown(f'<div class="shimmer-loading" style="height: {height}px; width: 100%; border-radius: 12px;"></div>', unsafe_allow_html=True)
 
 def display_animated_metric(label, value, delta=None, animation_delay=0):
     delay_style = f"animation-delay: {animation_delay}s;"
-    html = f"""
-    <div class="metric-card animate-fade-in-up" style="{delay_style}">
+    html = f"""<div class="metric-card animate-fade-in-up" style="{delay_style}">
         <div style="color: #9da3af; font-size: 14px; margin-bottom: 8px;">{label}</div>
         <div style="font-size: 36px; font-weight: bold; color: #3d4451;">{value}</div>
-        {f'<div style="color: #CDB4DB; font-size: 13px; margin-top: 8px;">{delta}</div>' if delta else ''}
-    </div>
-    """
+        {f'<div style="color: #CDB4DB; font-size: 13px; margin-top: 8px;">{delta}</div>' if delta else ''}</div>"""
     return st.markdown(html, unsafe_allow_html=True)
 
 def display_animated_chart(img_bytes, title, chart_index=0):
     delay = min(chart_index * 0.1, 0.5)
-    html = f"""
-    <div class="chart-container animate-fade-in-up" style="animation-delay: {delay}s;">
-        <h3 style="margin-bottom: 15px; color: #3d4451;">{title}</h3>
-    </div>
-    """
+    html = f'<div class="chart-container animate-fade-in-up" style="animation-delay: {delay}s;"><h3 style="margin-bottom: 15px; color: #3d4451;">{title}</h3></div>'
     st.markdown(html, unsafe_allow_html=True)
     st.image(img_bytes, use_container_width=True)
 
 def show_completion_message():
-    st.markdown("""
-    <div style="
-        background: linear-gradient(135deg, #CDB4DB 0%, #A2D5AB 100%);
-        border-radius: 12px;
-        padding: 15px;
-        text-align: center;
-        margin: 20px 0;
-    ">
-        <div style="color: white; font-size: 16px; font-weight: bold;">✅ Analysis Completed Successfully!</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("""<div style="background: linear-gradient(135deg, #CDB4DB 0%, #A2D5AB 100%); border-radius: 12px; padding: 15px; text-align: center; margin: 20px 0;">
+        <div style="color: white; font-size: 16px; font-weight: bold;">✅ Analysis Completed Successfully!</div></div>""", unsafe_allow_html=True)
     time.sleep(0.3)
 
 
@@ -216,21 +155,17 @@ def show_completion_message():
 def extract_factory_name(file_name):
     base_name = os.path.basename(file_name)
     name_without_ext = os.path.splitext(base_name)[0]
-    if len(name_without_ext) > 30:
-        name_without_ext = name_without_ext[:30]
-    return name_without_ext
+    return name_without_ext[:30] if len(name_without_ext) > 30 else name_without_ext
 
 def get_cnc_column_name(df):
     potential_cnc_cols = ['CNC OP', 'cnc op', 'Cnc Op', 'cnc station', 'CNC Station', 'Station']
     for col in df.columns:
-        for potential in potential_cnc_cols:
-            if potential.lower() == col.lower():
-                return col
+        if str(col).lower() in [p.lower() for p in potential_cnc_cols]: return col
     return None
 
 def fig_to_bytes(fig):
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight', transparent=True) # 透明背景
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight', transparent=True)
     buf.seek(0)
     plt.close(fig)
     return buf.getvalue()
@@ -239,64 +174,39 @@ def load_excel_data(file_content, factory_name, read_mode='default'):
     try:
         df = None
         if read_mode == 'ipeg':
-            fanuc_sheet_name = 'Machine OQ Rev-Fanuc'
-            jd_sheet_name = 'Machine OQ Rev-JD'
-            header_row = 3
             dfs_to_merge = []
-            
-            try:
-                df_fanuc = pd.read_excel(io.BytesIO(file_content), sheet_name=fanuc_sheet_name, header=header_row)
-                if df_fanuc is not None and not df_fanuc.empty:
-                    df_fanuc = df_fanuc.dropna(how='all')
-                    first_col = df_fanuc.columns[0]
-                    df_fanuc = df_fanuc[df_fanuc[first_col].notna()]
-                    if not df_fanuc.empty:
-                        dfs_to_merge.append(df_fanuc)
-            except Exception as e: pass
-            
-            try:
-                df_jd = pd.read_excel(io.BytesIO(file_content), sheet_name=jd_sheet_name, header=header_row)
-                if df_jd is not None and not df_jd.empty:
-                    df_jd = df_jd.dropna(how='all')
-                    first_col = df_jd.columns[0]
-                    df_jd = df_jd[df_jd[first_col].notna()]
-                    if not df_jd.empty:
-                        dfs_to_merge.append(df_jd)
-            except Exception as e: pass
-            
-            if not dfs_to_merge:
-                raise ValueError("No data found in either Fanuc or JD sheets")
-            
+            for sheet in ['Machine OQ Rev-Fanuc', 'Machine OQ Rev-JD']:
+                try:
+                    temp_df = pd.read_excel(io.BytesIO(file_content), sheet_name=sheet, header=3)
+                    if temp_df is not None and not temp_df.empty:
+                        temp_df = temp_df.dropna(how='all')
+                        temp_df = temp_df[temp_df[temp_df.columns[0]].notna()]
+                        if not temp_df.empty: dfs_to_merge.append(temp_df)
+                except: pass
+            if not dfs_to_merge: raise ValueError("No data found in either Fanuc or JD sheets")
             df = pd.concat(dfs_to_merge, ignore_index=True)
         else:
-            try:
-                df = pd.read_excel(io.BytesIO(file_content), sheet_name='Table', header=2)
-            except:
+            for header_idx in [2, 1, 0]:
                 try:
-                    df = pd.read_excel(io.BytesIO(file_content), sheet_name='Table', header=1)
-                except:
-                    df = pd.read_excel(io.BytesIO(file_content))
-        
-        if df is None or df.empty:
-            raise ValueError("Could not load any data from the Excel file")
+                    df = pd.read_excel(io.BytesIO(file_content), sheet_name='Table', header=header_idx)
+                    break
+                except: pass
+            if df is None: df = pd.read_excel(io.BytesIO(file_content))
+            
+        if df is None or df.empty: raise ValueError("Could not load any data from the Excel file")
         
         column_mapping = {}
         for col in df.columns:
             col_clean = str(col).replace('\n', ' ').replace('（', '(').replace('）', ')').strip()
-            if 'Station' in col_clean or '夹位' in col_clean:
-                column_mapping[col] = 'CNC OP'
-            elif 'Model' in col_clean and 'Probe' not in col_clean:
-                column_mapping[col] = 'Machine Model'
-            elif 'Date of Manufacturer' in col_clean or '設備製造日期' in col_clean:
-                column_mapping[col] = 'Year of manufacturer'
+            if 'Station' in col_clean or '夹位' in col_clean: column_mapping[col] = 'CNC OP'
+            elif 'Model' in col_clean and 'Probe' not in col_clean: column_mapping[col] = 'Machine Model'
+            elif 'Date of Manufacturer' in col_clean or '設備製造日期' in col_clean: column_mapping[col] = 'Year of manufacturer'
         
-        if column_mapping:
-            df = df.rename(columns=column_mapping)
+        if column_mapping: df = df.rename(columns=column_mapping)
         
         required_columns = ['CNC OP', 'Machine Model', 'Year of manufacturer']
         missing = [col for col in required_columns if col not in df.columns]
-        if missing:
-            raise ValueError(f"Required columns not found: {missing}")
+        if missing: raise ValueError(f"Required columns not found: {missing}")
         
         df['CNC OP'] = df['CNC OP'].astype(str)
         df['Machine Model'] = df['Machine Model'].astype(str)
@@ -306,44 +216,26 @@ def load_excel_data(file_content, factory_name, read_mode='default'):
         def safe_extract_year(val):
             if pd.isna(val): return None
             try:
-                if isinstance(val, (int, float)):
-                    num_val = int(val)
-                elif isinstance(val, str) and val.replace('.', '').isdigit():
-                    num_val = int(float(val))
-                else:
-                    num_val = None
-                
+                num_val = int(float(val)) if isinstance(val, (int, float, str)) and str(val).replace('.', '').isdigit() else None
                 if num_val and 30000 <= num_val <= 50000:
-                    excel_base = datetime(1899, 12, 30)
-                    date_val = excel_base + timedelta(days=num_val)
-                    year = date_val.year
-                    current_year = datetime.now().year
-                    if 1980 <= year <= current_year + 5: return year
+                    year = (datetime(1899, 12, 30) + timedelta(days=num_val)).year
+                    if 1980 <= year <= datetime.now().year + 5: return year
             except: pass
-            
-            str_val = str(val)
-            match = re.search(r'(19|20)\d{2}', str_val)
-            if match:
-                year = int(match.group(0))
-                current_year = datetime.now().year
-                if 1980 <= year <= current_year + 5: return year
+            match = re.search(r'(19|20)\d{2}', str(val))
+            if match and 1980 <= int(match.group(0)) <= datetime.now().year + 5: return int(match.group(0))
             return None
 
         df['Year_of_manufacturer'] = df['Year of manufacturer'].apply(safe_extract_year)
         df = df.dropna(subset=['Year_of_manufacturer'])
-        if df.empty: raise ValueError("No valid year data found after filtering")
         df['Year_of_manufacturer'] = df['Year_of_manufacturer'].astype(int)
         df['Factory'] = factory_name
-        
         return df, None
-        
     except Exception as e:
-        traceback.print_exc()
         return None, str(e)
 
 
 # ==========================================
-# Chart Generation Functions (Updated with Blue + Purple)
+# Chart Generation Functions
 # ==========================================
 
 def compare_machine_count(df1, df2, name1, name2):
@@ -354,7 +246,7 @@ def compare_machine_count(df1, df2, name1, name2):
     
     if cnc_col is None:
         ax.text(0.5, 0.5, "CNC Station column not found", ha='center', va='center', fontsize=14, color=THEME_GRAY)
-        return fig_to_bytes(fig)
+        return fig_to_bytes(fig) # Return just image if error
     
     def get_detailed_counts(df):
         cnc_col_actual = get_cnc_column_name(df)
@@ -380,7 +272,6 @@ def compare_machine_count(df1, df2, name1, name2):
     x = np.arange(len(compare_df['Station']))
     width = 0.35
     
-    # Factory A = Blue, Factory B = Purple
     ax.bar(x - width/2, compare_df[f'{name1}_Count'], width, label=name1, color=THEME_BLUE, alpha=0.6, edgecolor='white', linewidth=1)
     ax.bar(x + width/2, compare_df[f'{name2}_Count'], width, label=name2, color=THEME_PURPLE, alpha=0.6, edgecolor='white', linewidth=1)
     
@@ -396,7 +287,16 @@ def compare_machine_count(df1, df2, name1, name2):
     for spine in ax.spines.values(): spine.set_edgecolor(THEME_GRAY)
     
     plt.tight_layout()
-    return fig_to_bytes(fig)
+    
+    # 【新增】构建详细型号的数据框，用于在图表下方展示
+    detail_df = pd.DataFrame({
+        'CNC Station': compare_df['Station'],
+        f'{name1} Models (型号)': compare_df[f'{name1}_Models'].apply(lambda x: ', '.join(map(str, x)) if isinstance(x, list) else '-'),
+        f'{name2} Models (型号)': compare_df[f'{name2}_Models'].apply(lambda x: ', '.join(map(str, x)) if isinstance(x, list) else '-')
+    })
+    
+    # 这里返回一个 Tuple (图片字节, 数据框)
+    return fig_to_bytes(fig), detail_df
 
 
 def compare_machine_age(df1, df2, name1, name2):
@@ -432,15 +332,12 @@ def compare_machine_age(df1, df2, name1, name2):
     
     ax1.set_title('Machine Age Distribution', fontsize=14, color='#333')
     ax1.set_ylabel('Age (Years)', color='#444')
-    ax1.tick_params(colors='#555')
     
-    # Factory A = Blue, Factory B = Purple
     ax2.hist(ages1, bins=bins, alpha=0.55, label=name1, color=THEME_BLUE, edgecolor='white', linewidth=1)
     ax2.hist(ages2, bins=bins, alpha=0.55, label=name2, color=THEME_PURPLE, edgecolor='white', linewidth=1)
     ax2.set_title('Age Distribution Histogram', fontsize=14, color='#333')
     ax2.set_xlabel('Age (Years)', color='#444')
     ax2.set_ylabel('Frequency', color='#444')
-    ax2.tick_params(colors='#555')
     ax2.legend(frameon=True, facecolor='white', edgecolor='none')
     
     for ax in [ax1, ax2]:
@@ -452,7 +349,6 @@ def compare_machine_age(df1, df2, name1, name2):
     plt.tight_layout()
     return fig_to_bytes(fig)
 
-
 def extract_spindle_runout_universal(df, position='near'):
     values, used_cols = [], []
     position_patterns = [r'@5mm', r'@5\s*mm', r'5mm', r'5\s*mm', r'near'] if position == 'near' else [r'@300mm', r'@300\s*mm', r'300mm', r'@150mm', r'150mm', r'far']
@@ -461,24 +357,17 @@ def extract_spindle_runout_universal(df, position='near'):
     for col in df.columns:
         col_str = str(col).lower()
         if 'runout' not in col_str and '跳动' not in col_str: continue
-        
         is_position_match = any(re.search(p, col_str, re.IGNORECASE) for p in position_patterns)
         if position == 'near' and not is_position_match and ('spindle nose' in col_str or '主軸' in col_str):
             if not any(re.search(e, col_str, re.IGNORECASE) for e in exclude_patterns):
                 is_position_match = True
-                
         if not is_position_match or any(re.search(e, col_str, re.IGNORECASE) for e in exclude_patterns): continue
-        
         vals = pd.to_numeric(df[col], errors='coerce').dropna()
         if len(vals) == 0: continue
-        
-        if any(x in col for x in ['[µm]', '[μm]', 'micron', 'um]']) or ('mm' not in col):
-            vals = vals / 1000
-            
+        if any(x in col for x in ['[µm]', '[μm]', 'micron', 'um]']) or ('mm' not in col): vals = vals / 1000
         values.extend(vals.tolist())
         used_cols.append(col)
     return values, used_cols
-
 
 def compare_spindle_runout(df1, df2, name1, name2):
     near1, _ = extract_spindle_runout_universal(df1, 'near')
@@ -501,22 +390,15 @@ def compare_spindle_runout(df1, df2, name1, name2):
         plt.tight_layout()
         return fig_to_bytes(fig)
     
-    if has_near_data:
-        _plot_runout_distribution(ax1, near1, near2, name1, name2, USL_NEAR_MM, 'Near End (5mm / Spindle Nose)\nSpec: <=6um')
-    else:
-        ax1.text(0.5, 0.5, "Near end data not found", ha='center', va='center', fontsize=11, color=THEME_GRAY)
-        ax1.set_title('Near End Runout - No Data', fontsize=12, color='#333')
+    if has_near_data: _plot_runout_distribution(ax1, near1, near2, name1, name2, USL_NEAR_MM, 'Near End (5mm / Spindle Nose)\nSpec: <=6um')
+    else: ax1.set_title('Near End Runout - No Data')
     
-    if has_far_data:
-        _plot_runout_distribution(ax2, far1, far2, name1, name2, USL_FAR_MM, 'Far End (300mm from Spindle Nose)\nSpec: <=30um')
-    else:
-        ax2.text(0.5, 0.5, "Far end data not found", ha='center', va='center', fontsize=11, color=THEME_GRAY)
-        ax2.set_title('Far End Runout - No Data', fontsize=12, color='#333')
+    if has_far_data: _plot_runout_distribution(ax2, far1, far2, name1, name2, USL_FAR_MM, 'Far End (300mm from Spindle Nose)\nSpec: <=30um')
+    else: ax2.set_title('Far End Runout - No Data')
     
     fig.suptitle(f'Spindle Runout Comparison\n{name1} vs {name2}', fontsize=14, fontweight='bold', color='#333')
     plt.tight_layout()
     return fig_to_bytes(fig)
-
 
 def _plot_runout_distribution(ax, data1, data2, name1, name2, usl_mm, title):
     def calc_stats(data, label):
@@ -532,8 +414,7 @@ def _plot_runout_distribution(ax, data1, data2, name1, name2, usl_mm, title):
     all_data = data1 + data2
     
     if not all_data:
-        ax.text(0.5, 0.5, "No valid data", ha='center', va='center', fontsize=12)
-        ax.set_title(title, color='#333')
+        ax.set_title(title)
         return
     
     x_min = min(0, min(all_data) * 0.9)
@@ -544,7 +425,6 @@ def _plot_runout_distribution(ax, data1, data2, name1, name2, usl_mm, title):
         y1 = stats.norm.pdf(x_range, stats1['mean'], stats1['std'])
         ax.plot(x_range, y1, '-', linewidth=2.5, label=f'{name1} (Fit)', color=THEME_BLUE)
         ax.hist(data1, bins=15, density=True, alpha=0.45, color=THEME_BLUE, edgecolor='white')
-    
     if stats2:
         y2 = stats.norm.pdf(x_range, stats2['mean'], stats2['std'])
         ax.plot(x_range, y2, '-', linewidth=2.5, label=f'{name2} (Fit)', color=THEME_PURPLE)
@@ -556,14 +436,11 @@ def _plot_runout_distribution(ax, data1, data2, name1, name2, usl_mm, title):
     ax.set_xlabel('Runout (mm)', fontsize=11, color='#444')
     ax.set_ylabel('Probability Density', fontsize=11, color='#444')
     ax.set_title(title, fontsize=11, color='#333')
-    ax.tick_params(colors='#555')
     ax.legend(loc='upper right', fontsize=8, frameon=True, facecolor='white', edgecolor='none')
     ax.set_xlim(x_min, x_max)
     ax.grid(True, alpha=0.2, color=THEME_GRAY)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    for spine in ax.spines.values(): spine.set_edgecolor(THEME_GRAY)
-
 
 def compare_spindle_velocity(df1, df2, name1, name2):
     target_stations = ['CNC4', 'CNC4.1', 'CNC5', 'CNC6', 'CNC7', 'CNC7.2', 'CNC8']
@@ -585,11 +462,9 @@ def compare_spindle_velocity(df1, df2, name1, name2):
         
         extracted_data = {}
         rpm_priority = [18000] if read_mode == 'ipeg' else [18000, 16000, 10000]
-        
         for station in df_f[cnc_col_actual].unique():
             station_df = df_f[df_f[cnc_col_actual] == station]
             selected_col, selected_rpm = None, None
-            
             for target_rpm in rpm_priority:
                 for col in station_df.columns:
                     col_str = str(col).lower()
@@ -599,11 +474,9 @@ def compare_spindle_velocity(df1, df2, name1, name2):
                             selected_col, selected_rpm = col, target_rpm
                             break
                 if selected_col: break
-            
             if selected_col:
                 vals = pd.to_numeric(station_df[selected_col], errors='coerce').dropna()
-                if len(vals) > 0:
-                    extracted_data[station] = {'mean': np.mean(vals), 'std': np.std(vals) if len(vals) > 1 else 0.001, 'n': len(vals), 'rpm': selected_rpm}
+                if len(vals) > 0: extracted_data[station] = {'mean': np.mean(vals), 'std': np.std(vals) if len(vals) > 1 else 0.001, 'n': len(vals), 'rpm': selected_rpm}
         return extracted_data
     
     data1 = extract_velocity_data(df1, read_mode='ipeg' if name1.lower().startswith('ipeg') else 'default')
@@ -636,21 +509,14 @@ def compare_spindle_velocity(df1, df2, name1, name2):
     
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    for spine in ax.spines.values(): spine.set_edgecolor(THEME_GRAY)
     ax.grid(True, alpha=0.2, axis='y', color=THEME_GRAY)
-    
-    ax.set_xlabel('CNC Station', fontsize=12, color='#444')
-    ax.set_ylabel('Velocity (mm/s)', fontsize=12, color='#444')
-    ax.set_title(f'Spindle Velocity Comparison\n{name1} vs {name2}', fontsize=14, color='#333')
+    ax.set_title(f'Spindle Velocity Comparison\n{name1} vs {name2}')
     ax.set_xticks(x)
-    ax.set_xticklabels(all_stations, rotation=45, ha='right', fontsize=9, color='#555')
-    ax.tick_params(colors='#555')
-    ax.set_ylim(0, y_max * 1.1)
-    ax.legend(loc='upper left', fontsize=10, frameon=True, facecolor='white', edgecolor='none')
+    ax.set_xticklabels(all_stations, rotation=45, ha='right')
+    ax.legend(loc='upper left', frameon=True, facecolor='white', edgecolor='none')
     
     plt.tight_layout()
     return fig_to_bytes(fig)
-
 
 def compare_spindle_acceleration(df1, df2, name1, name2):
     target_stations = ['CNC4', 'CNC4.1', 'CNC5', 'CNC6', 'CNC7', 'CNC7.2', 'CNC8']
@@ -681,10 +547,6 @@ def compare_spindle_acceleration(df1, df2, name1, name2):
     data1 = extract_data(df1)
     data2 = extract_data(df2)
     
-    if not data1 and not data2:
-        ax.text(0.5, 0.5, "Acceleration data not found", ha='center', va='center', fontsize=14, color=THEME_GRAY)
-        return fig_to_bytes(fig)
-    
     all_stations = sorted(set(data1.keys()) | set(data2.keys()))
     x = np.arange(len(all_stations))
     width = 0.35
@@ -703,20 +565,14 @@ def compare_spindle_acceleration(df1, df2, name1, name2):
     
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    for spine in ax.spines.values(): spine.set_edgecolor(THEME_GRAY)
     ax.grid(True, alpha=0.2, axis='y', color=THEME_GRAY)
-    
-    ax.set_xlabel('CNC Station', fontsize=12, color='#444')
-    ax.set_ylabel('Acceleration (m/s²)', fontsize=12, color='#444')
-    ax.set_title(f'Spindle Acceleration Comparison\n{name1} vs {name2}', fontsize=14, color='#333')
+    ax.set_title(f'Spindle Acceleration Comparison\n{name1} vs {name2}')
     ax.set_xticks(x)
-    ax.set_xticklabels(all_stations, rotation=45, ha='right', fontsize=9, color='#555')
-    ax.tick_params(colors='#555')
+    ax.set_xticklabels(all_stations, rotation=45, ha='right')
     ax.legend(frameon=True, facecolor='white', edgecolor='none')
     
     plt.tight_layout()
     return fig_to_bytes(fig)
-
 
 def compare_marble_squareness_combined(df1, df2, name1, name2):
     cnc_col1 = get_cnc_column_name(df1)
@@ -730,11 +586,6 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
     directions = ['XY', 'YZ', 'ZX']
     spec_a, spec_b = [16.0, 20.0, 20.0], [20.0, 30.0, 30.0]
     
-    def convert_squareness_unit(value, col_name):
-        if pd.isna(value): return np.nan
-        if isinstance(value, (int, float)) and value < 1: return value * 1000
-        return value
-    
     def get_station_data(df, cnc_col):
         if cnc_col is None: return {}
         data = {}
@@ -742,13 +593,11 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
             station_df = df[df[cnc_col] == station]
             station_plane_data = {}
             for plane in directions:
-                alt_plane = plane[::-1]
-                sq_cols = [c for c in df.columns if 'Squareness' in str(c) and (plane in str(c) or alt_plane in str(c))]
-                vals = [convert_squareness_unit(v, col) for col in sq_cols for v in pd.to_numeric(station_df[col], errors='coerce').dropna()]
+                sq_cols = [c for c in df.columns if 'Squareness' in str(c) and (plane in str(c) or plane[::-1] in str(c))]
+                vals = [v * 1000 if (isinstance(v, (int, float)) and v < 1) else v for col in sq_cols for v in pd.to_numeric(station_df[col], errors='coerce').dropna()]
                 vals = [v for v in vals if not pd.isna(v)]
                 station_plane_data[plane] = {'mean': np.mean(vals), 'max': np.max(vals)} if vals else {'mean': np.nan, 'max': np.nan}
-            if not all(np.isnan(station_plane_data[p]['mean']) for p in directions):
-                data[station] = station_plane_data
+            if not all(np.isnan(station_plane_data[p]['mean']) for p in directions): data[station] = station_plane_data
         return data
     
     data1 = get_station_data(df1, cnc_col1)
@@ -777,21 +626,17 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
         ax = fig.add_subplot(rows, cols, i + 1, projection='polar')
         ax.set_facecolor('none')
         
-        # Draw Specs with soft pastel colors
         ax.plot(angles, spec_b_closed, color=THEME_ORANGE, linestyle='--', linewidth=1.5)
         ax.fill(angles, spec_b_closed, color=THEME_ORANGE, alpha=0.05)
         
         ax.plot(angles, spec_a_closed, color=THEME_GREEN, linestyle='--', linewidth=1.5)
         ax.fill(angles, spec_a_closed, color=THEME_GREEN, alpha=0.08)
         
-        station_data1, station_data2 = data1.get(station, {}), data2.get(station, {})
-        means1 = [station_data1.get(p, {}).get('mean', np.nan) for p in directions]
-        means2 = [station_data2.get(p, {}).get('mean', np.nan) for p in directions]
+        means1 = [data1.get(station, {}).get(p, {}).get('mean', np.nan) for p in directions]
+        means2 = [data2.get(station, {}).get(p, {}).get('mean', np.nan) for p in directions]
         
-        means1_closed = [m if not np.isnan(m) else 0 for m in means1]
-        means1_closed += [means1_closed[0]]
-        means2_closed = [m if not np.isnan(m) else 0 for m in means2]
-        means2_closed += [means2_closed[0]]
+        means1_closed = [m if not np.isnan(m) else 0 for m in means1] + [[m if not np.isnan(m) else 0 for m in means1][0]]
+        means2_closed = [m if not np.isnan(m) else 0 for m in means2] + [[m if not np.isnan(m) else 0 for m in means2][0]]
         
         if not all(np.isnan(m) for m in means1):
             ax.plot(angles, means1_closed, color=THEME_BLUE, linewidth=2.0, label=f'{name1} Mean')
@@ -804,9 +649,7 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
         ax.set_theta_direction(-1)
         ax.set_rlabel_position(0)
         ax.grid(color=THEME_GRAY, alpha=0.3)
-        
-        labels = [f"XY\n(A:{spec_a[0]}um, B:{spec_b[0]}um)", f"YZ\n(A:{spec_a[1]}um, B:{spec_b[1]}um)", f"ZX\n(A:{spec_a[2]}um, B:{spec_b[2]}um)"]
-        ax.set_thetagrids(np.degrees(angles[:-1]), labels, fontsize=10, color='#555')
+        ax.set_thetagrids(np.degrees(angles[:-1]), [f"{p}\n(A:{a}um, B:{b}um)" for p, a, b in zip(directions, spec_a, spec_b)], fontsize=10, color='#555')
         ax.set_title(station, y=1.2, fontsize=14, fontweight='bold', color='#333')
     
     fig.suptitle('Marble Squareness Profile by Station (Unit: um)', fontsize=18, fontweight='bold', color='#333')
@@ -821,12 +664,11 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
 def main():
     add_custom_css()
     
-    # Updated text gradient to match pastel aesthetic
     st.markdown("""
     <div class="animate-fade-in-up" style="text-align: center;">
         <h1 style="font-size: 2.5rem; background: linear-gradient(135deg, #7A9CE0, #CDB4DB); 
                    -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-            ⚙️ CNC Machine Precision Comparison Analysis System
+            🔧 Machine Tool Precision Comparison Analysis System
         </h1>
         <p style="color: #9da3af; margin-top: 10px;">Compare and analyze machine tool precision across different factories</p>
     </div>
@@ -856,17 +698,6 @@ def main():
         enable_chart_animations = st.checkbox("Enable Chart Animations", value=True)
         animation_speed = st.select_slider("Animation Speed", options=["Slow", "Normal", "Fast"], value="Normal")
         speed_multiplier = {"Slow": 0.7, "Normal": 1.0, "Fast": 1.5}[animation_speed]
-        
-        st.markdown("---")
-        st.markdown("### 📊 Analysis Features")
-        st.markdown("""
-        - Machine Type Count Comparison
-        - Machine Age Distribution
-        - Spindle Runout Analysis
-        - Spindle Velocity Analysis
-        - Spindle Acceleration Analysis
-        - Marble Squareness Profile
-        """)
     
     button_col1, button_col2, button_col3 = st.columns([1, 2, 1])
     with button_col2:
@@ -945,14 +776,45 @@ def main():
                         st.markdown(f"### {title}")
                         show_shimmer_loading(400)
                     time.sleep(0.15 / speed_multiplier)
-                    img_bytes = func(df1, df2, factory1_name, factory2_name)
+                    
+                    # 修改：处理函数可能返回Tuple (图片， 额外数据)
+                    result = func(df1, df2, factory1_name, factory2_name)
+                    if isinstance(result, tuple):
+                        img_bytes, extra_data = result
+                    else:
+                        img_bytes, extra_data = result, None
+                        
                     shimmer_placeholder.empty()
                     display_animated_chart(img_bytes, title, idx)
+                    
+                    # 【新增】如果有详细机台型号的数据框，就使用折叠面板显示
+                    if extra_data is not None:
+                        with st.expander("📋 点击展开：查看各工站具体机台型号列表 (View Detailed Machine Models)", expanded=False):
+                            # Streamlit 1.28+ 支持 hide_index=True 隐藏最左侧索引
+                            try:
+                                st.dataframe(extra_data, hide_index=True, use_container_width=True)
+                            except:
+                                st.dataframe(extra_data, use_container_width=True)
+                                
                 else:
                     with st.spinner(f"Generating {title}..."):
-                        img_bytes = func(df1, df2, factory1_name, factory2_name)
+                        result = func(df1, df2, factory1_name, factory2_name)
+                        if isinstance(result, tuple):
+                            img_bytes, extra_data = result
+                        else:
+                            img_bytes, extra_data = result, None
+                            
                         st.markdown(f"### {title}")
                         st.image(img_bytes, use_container_width=True)
+                        
+                        # 【新增】无动画模式下同样显示折叠面板
+                        if extra_data is not None:
+                            with st.expander("📋 点击展开：查看各工站具体机台型号列表 (View Detailed Machine Models)", expanded=False):
+                                try:
+                                    st.dataframe(extra_data, hide_index=True, use_container_width=True)
+                                except:
+                                    st.dataframe(extra_data, use_container_width=True)
+                                    
                 st.markdown("---")
             
             show_completion_message()
