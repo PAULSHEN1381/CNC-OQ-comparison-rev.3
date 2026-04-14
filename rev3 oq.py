@@ -45,7 +45,7 @@ plt.rcParams['axes.unicode_minus'] = False
 
 
 # ==========================================
-# Custom CSS for Animations
+# Custom CSS for Animations & UI
 # ==========================================
 
 def add_custom_css():
@@ -102,11 +102,47 @@ def add_custom_css():
         transform: translateY(-5px);
         box-shadow: 0 8px 20px rgba(205, 180, 219, 0.2); 
     }
-    .stButton > button { transition: all 0.3s ease !important; }
-    .stButton > button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 4px 12px rgba(155, 176, 226, 0.4) !important;
+    
+    /* 🍎 Apple Home Button Style for Start Analysis */
+    div.stButton > button[kind="primary"] {
+        /* 白色背景与银色金属渐变边框 */
+        background: linear-gradient(#ffffff, #ffffff) padding-box,
+                    linear-gradient(145deg, #f0f0f3, #a1a1a6, #f0f0f3, #d1d1d6) border-box !important;
+        border: 4px solid transparent !important;
+        border-radius: 50px !important; /* 胶囊形状 */
+        color: #1d1d1f !important; /* 苹果深灰色字体 */
+        padding: 12px 24px !important;
+        box-shadow: 
+            0 6px 16px rgba(0, 0, 0, 0.06), /* 柔和外阴影 */
+            inset 0 -2px 6px rgba(0, 0, 0, 0.04), /* 底部内嵌微小阴影营造立体感 */
+            inset 0 2px 4px rgba(255, 255, 255, 0.8) !important; /* 顶部高光 */
+        transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1) !important; /* Q弹的动画 */
     }
+    
+    div.stButton > button[kind="primary"]:hover {
+        transform: scale(0.97) !important; /* 鼠标悬浮时产生"按下"物理按键的错觉 */
+        box-shadow: 
+            0 2px 8px rgba(0, 0, 0, 0.04), 
+            inset 0 -1px 3px rgba(0, 0, 0, 0.02),
+            inset 0 2px 4px rgba(255, 255, 255, 0.8) !important;
+        /* 边框金属反光加深 */
+        background: linear-gradient(#fdfdfd, #fdfdfd) padding-box,
+                    linear-gradient(145deg, #d1d1d6, #8e8e93, #d1d1d6, #bcbcc0) border-box !important;
+    }
+    
+    div.stButton > button[kind="primary"]:active {
+        transform: scale(0.94) !important; /* 点击时压得更深 */
+        background: linear-gradient(#f4f4f4, #f4f4f4) padding-box,
+                    linear-gradient(145deg, #bcbcc0, #7c7c80, #bcbcc0, #a1a1a6) border-box !important;
+    }
+    
+    /* 让按钮内部的字体更粗一点 */
+    div.stButton > button[kind="primary"] p {
+        font-size: 18px !important;
+        font-weight: 600 !important; /* 苹方字体常用的半粗体 */
+        color: #1d1d1f !important;
+    }
+
     .chart-container { animation: fadeInUp 0.6s ease-out; }
     
     .stProgress > div > div {
@@ -518,7 +554,6 @@ def generate_executive_summary(df1, df2, name1, name2):
         if not cnc_col: return "No Data", []
         directions = ['XY', 'YZ', 'ZX']
         
-        # 分别用来记录每个 Station 真正超差 (Out of Spec) 和 降级 (Grade B) 的机台数量
         station_oos_counts = defaultdict(int)
         station_gb_counts = defaultdict(int)
         has_data = False
@@ -531,7 +566,6 @@ def generate_executive_summary(df1, df2, name1, name2):
             oos_count = 0
             gb_count = 0
             
-            # 以每台机台（每一行数据）为单位进行遍历检验
             for idx, row in station_df.iterrows():
                 is_oos = False
                 is_gb = False
@@ -542,17 +576,14 @@ def generate_executive_summary(df1, df2, name1, name2):
                         raw_v = pd.to_numeric(row[c], errors='coerce')
                         if pd.notna(raw_v):
                             has_data = True
-                            # 统一转换单位为 μm
                             v = raw_v * 1000 if raw_v < 1 else raw_v
                             
-                            # 判断是否 Out of spec
                             if plane == 'XY' and v > 20.0: is_oos = True
                             elif plane in ['YZ', 'ZX'] and v > 30.0: is_oos = True
-                            # 判断是否 Grade B
+                            
                             elif plane == 'XY' and v > 16.0: is_gb = True
                             elif plane in ['YZ', 'ZX'] and v > 20.0: is_gb = True
                 
-                # 如果这台机器超差，单独计数+1（超标优先计算）
                 if is_oos:
                     oos_count += 1
                 elif is_gb:
@@ -565,7 +596,6 @@ def generate_executive_summary(df1, df2, name1, name2):
                 
         if not has_data: return "No Data", []
         
-        # 组装最终结果
         if station_oos_counts:
             status = f"<span style='color: {THEME_RED}; font-weight: bold;'>Out of Spec</span>"
             details = [f"{st} (x{count} machines)" for st, count in station_oos_counts.items()]
