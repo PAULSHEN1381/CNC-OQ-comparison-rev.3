@@ -1242,7 +1242,7 @@ def main():
                 ("Spindle Runout Comparison", compare_spindle_runout, None),
                 ("Spindle Velocity Vibration Comparison", compare_spindle_velocity, None),
                 ("Spindle Acceleration Vibration Comparison", compare_spindle_acceleration, None),
-                ("Marble Squareness Comparison", compare_marble_squareness_combined, "📋 View Squareness Extracted Data (Debug)")
+                ("Marble Squareness Comparison", compare_marble_squareness_combined, None)
             ]
             
             for idx, (title, func, expander_title) in enumerate(chart_sections):
