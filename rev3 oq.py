@@ -234,11 +234,11 @@ def load_excel_data(file_content, factory_name, read_mode='default'):
         return None, str(e)
 
 
-# ==========================================
-# Executive Summary Generator
-# ==========================================
-
 def extract_spindle_runout_universal(df, position='near'):
+    """
+    通用偏摆提取函数：
+    包含单位智能纠错逻辑，如果输入数值 > 1，自动将其视为 μm 并转为 mm。
+    """
     values, used_cols = [], []
     position_patterns = [r'@5mm', r'@5\s*mm', r'5mm', r'5\s*mm', r'near'] if position == 'near' else [r'@300mm', r'@300\s*mm', r'300mm', r'@150mm', r'150mm', r'far']
     exclude_patterns = [r'@300', r'300mm', r'150mm', r'@150', r'far'] if position == 'near' else [r'@5mm', r'5mm', r'near']
@@ -251,12 +251,26 @@ def extract_spindle_runout_universal(df, position='near'):
             if not any(re.search(e, col_str, re.IGNORECASE) for e in exclude_patterns):
                 is_position_match = True
         if not is_position_match or any(re.search(e, col_str, re.IGNORECASE) for e in exclude_patterns): continue
+        
         vals = pd.to_numeric(df[col], errors='coerce').dropna()
         if len(vals) == 0: continue
-        if any(x in col for x in ['[µm]', '[μm]', 'micron', 'um]']) or ('mm' not in col): vals = vals / 1000
-        values.extend(vals.tolist())
+        
+        # 1. 依靠列名判定：如果明确标了 um 或者没标 mm，转换为 mm
+        if any(x in col_str for x in ['[µm]', '[μm]', 'micron', 'um]']) or ('mm' not in col_str): 
+            vals = vals / 1000
+            
+        # 2. 依靠数值判定 (智能纠错)：偏摆数值通常很小(如 0.005mm)，如果输入值 > 1，必定是以 um 为单位填写的错填数据，强制除以 1000
+        vals = [v / 1000 if v > 1 else v for v in vals]
+        
+        values.extend(vals)
         used_cols.append(col)
+        
     return values, used_cols
+
+
+# ==========================================
+# Executive Summary Generator
+# ==========================================
 
 def generate_executive_summary(df1, df2, name1, name2):
     compliance_summaries = []
@@ -954,7 +968,7 @@ def main():
             comp_sums, insight_sums = generate_executive_summary(df1, df2, factory1_name, factory2_name)
             
             if comp_sums or insight_sums:
-                # 把 HTML 拍扁，避免带有 4 个空格的缩进被解析为 Markdown 的代码块 (Code Block)
+                # 把所有的 HTML 组装拼成没有额外缩进换行的长字符串，防止被 markdown 当成代码块
                 summary_html = f"<div class='animate-fade-in-up' style='background: linear-gradient(to right, rgba(155, 176, 226, 0.08), rgba(205, 180, 219, 0.08)); border-radius: 12px; border-left: 6px solid {THEME_PURPLE}; padding: 20px 30px; margin: 30px 0 25px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.03);'>"
                 summary_html += "<h2 style='margin-top: 0; color: #3d4451; font-size: 22px; margin-bottom: 15px;'>💡 Executive Summary</h2>"
                 
