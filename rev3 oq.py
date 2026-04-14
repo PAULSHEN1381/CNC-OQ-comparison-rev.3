@@ -1,5 +1,5 @@
 # file name: app_streamlit_animated.py
-# Factory Machine Tool Precision Comparison Analysis System - Streamlit Version with Animations
+#CNC Precision Comparison Analysis System - Streamlit Version with Animations
 
 import streamlit as st
 import pandas as pd
@@ -28,11 +28,12 @@ st.set_page_config(
 # ==========================================
 # Color Theme: Pastel / Macaron (浅色半透明主题)
 # ==========================================
-THEME_BLUE = '#9BB0E2'    # 柔和长春花蓝 (Soft Periwinkle Blue)
-THEME_ORANGE = '#F6B79D'  # 柔和蜜桃粉橘 (Soft Peach Orange)
-THEME_GREEN = '#A2D5AB'   # 柔和薄荷绿 (Soft Mint Green)
-THEME_RED = '#F4A4A4'     # 柔和珊瑚红 (Soft Coral Red)
-THEME_GRAY = '#C5C9D1'    # 浅灰色 (Soft Gray)
+THEME_BLUE = '#9BB0E2'    # 柔和长春花蓝 (Factory A)
+THEME_PURPLE = '#CDB4DB'  # 柔和丁香紫 / 浅紫 (Factory B) - 新增！
+THEME_GREEN = '#A2D5AB'   # 柔和薄荷绿 (用于 Target / Grade A 标准线)
+THEME_ORANGE = '#F6B79D'  # 柔和蜜桃粉橘 (用于 Grade B 标准线)
+THEME_RED = '#F4A4A4'     # 柔和珊瑚红 (用于 USL 规格上限)
+THEME_GRAY = '#C5C9D1'    # 浅灰色 (用于网格和坐标轴)
 
 # Set font
 try:
@@ -120,7 +121,7 @@ def add_custom_css():
     
     .metric-card:hover {
         transform: translateY(-5px);
-        box-shadow: 0 8px 20px rgba(155, 176, 226, 0.15);
+        box-shadow: 0 8px 20px rgba(205, 180, 219, 0.2); /* Soft purple glow */
     }
     
     .stButton > button {
@@ -136,9 +137,9 @@ def add_custom_css():
         animation: fadeInUp 0.6s ease-out;
     }
     
-    /* Progress bar animation (Pastel Gradient) */
+    /* Progress bar animation (Pastel Gradient: Blue to Purple) */
     .stProgress > div > div {
-        background: linear-gradient(90deg, #9BB0E2, #A2D5AB, #9BB0E2);
+        background: linear-gradient(90deg, #9BB0E2, #CDB4DB, #9BB0E2);
         background-size: 200% 100%;
         animation: shimmer 2s infinite;
     }
@@ -178,7 +179,7 @@ def display_animated_metric(label, value, delta=None, animation_delay=0):
     <div class="metric-card animate-fade-in-up" style="{delay_style}">
         <div style="color: #9da3af; font-size: 14px; margin-bottom: 8px;">{label}</div>
         <div style="font-size: 36px; font-weight: bold; color: #3d4451;">{value}</div>
-        {f'<div style="color: #A2D5AB; font-size: 13px; margin-top: 8px;">{delta}</div>' if delta else ''}
+        {f'<div style="color: #CDB4DB; font-size: 13px; margin-top: 8px;">{delta}</div>' if delta else ''}
     </div>
     """
     return st.markdown(html, unsafe_allow_html=True)
@@ -196,7 +197,7 @@ def display_animated_chart(img_bytes, title, chart_index=0):
 def show_completion_message():
     st.markdown("""
     <div style="
-        background: linear-gradient(135deg, #A2D5AB 0%, #8CC296 100%);
+        background: linear-gradient(135deg, #CDB4DB 0%, #A2D5AB 100%);
         border-radius: 12px;
         padding: 15px;
         text-align: center;
@@ -342,7 +343,7 @@ def load_excel_data(file_content, factory_name, read_mode='default'):
 
 
 # ==========================================
-# Chart Generation Functions (Updated with Pastel Theme)
+# Chart Generation Functions (Updated with Blue + Purple)
 # ==========================================
 
 def compare_machine_count(df1, df2, name1, name2):
@@ -379,9 +380,9 @@ def compare_machine_count(df1, df2, name1, name2):
     x = np.arange(len(compare_df['Station']))
     width = 0.35
     
-    # Updated: Pastel Colors + High Transparency
+    # Factory A = Blue, Factory B = Purple
     ax.bar(x - width/2, compare_df[f'{name1}_Count'], width, label=name1, color=THEME_BLUE, alpha=0.6, edgecolor='white', linewidth=1)
-    ax.bar(x + width/2, compare_df[f'{name2}_Count'], width, label=name2, color=THEME_ORANGE, alpha=0.6, edgecolor='white', linewidth=1)
+    ax.bar(x + width/2, compare_df[f'{name2}_Count'], width, label=name2, color=THEME_PURPLE, alpha=0.6, edgecolor='white', linewidth=1)
     
     ax.set_xlabel('CNC Station', fontsize=12, color='#444')
     ax.set_ylabel('Number of Machine Types', fontsize=12, color='#444')
@@ -415,10 +416,10 @@ def compare_machine_age(df1, df2, name1, name2):
     
     if len(ages1) > 0 and len(ages2) > 0:
         bp = ax1.boxplot([ages1, ages2], tick_labels=[name1, name2], patch_artist=True)
-        colors = [THEME_BLUE, THEME_ORANGE]
+        colors = [THEME_BLUE, THEME_PURPLE]
         for patch, color in zip(bp['boxes'], colors):
             patch.set_facecolor(color)
-            patch.set_alpha(0.55) # Lower alpha for boxplot
+            patch.set_alpha(0.55)
             patch.set_edgecolor('#ffffff')
             patch.set_linewidth(1.5)
         for median in bp['medians']:
@@ -433,9 +434,9 @@ def compare_machine_age(df1, df2, name1, name2):
     ax1.set_ylabel('Age (Years)', color='#444')
     ax1.tick_params(colors='#555')
     
-    # Updated: Pastel Colors + Overlap Transparency
+    # Factory A = Blue, Factory B = Purple
     ax2.hist(ages1, bins=bins, alpha=0.55, label=name1, color=THEME_BLUE, edgecolor='white', linewidth=1)
-    ax2.hist(ages2, bins=bins, alpha=0.55, label=name2, color=THEME_ORANGE, edgecolor='white', linewidth=1)
+    ax2.hist(ages2, bins=bins, alpha=0.55, label=name2, color=THEME_PURPLE, edgecolor='white', linewidth=1)
     ax2.set_title('Age Distribution Histogram', fontsize=14, color='#333')
     ax2.set_xlabel('Age (Years)', color='#444')
     ax2.set_ylabel('Frequency', color='#444')
@@ -539,7 +540,6 @@ def _plot_runout_distribution(ax, data1, data2, name1, name2, usl_mm, title):
     x_max = max(usl_mm * 1.5, max(all_data) * 1.2)
     x_range = np.linspace(x_min, x_max, 200)
     
-    # Updated: Transparent Pastels for overlaps
     if stats1:
         y1 = stats.norm.pdf(x_range, stats1['mean'], stats1['std'])
         ax.plot(x_range, y1, '-', linewidth=2.5, label=f'{name1} (Fit)', color=THEME_BLUE)
@@ -547,8 +547,8 @@ def _plot_runout_distribution(ax, data1, data2, name1, name2, usl_mm, title):
     
     if stats2:
         y2 = stats.norm.pdf(x_range, stats2['mean'], stats2['std'])
-        ax.plot(x_range, y2, '-', linewidth=2.5, label=f'{name2} (Fit)', color=THEME_ORANGE)
-        ax.hist(data2, bins=15, density=True, alpha=0.45, color=THEME_ORANGE, edgecolor='white')
+        ax.plot(x_range, y2, '-', linewidth=2.5, label=f'{name2} (Fit)', color=THEME_PURPLE)
+        ax.hist(data2, bins=15, density=True, alpha=0.45, color=THEME_PURPLE, edgecolor='white')
     
     ax.axvline(x=usl_mm, color=THEME_RED, linestyle='--', linewidth=2, label=f'USL: {usl_mm*1000:.0f}um')
     ax.axvline(x=usl_mm * 0.5, color=THEME_GREEN, linestyle=':', linewidth=2, label=f'Target: {usl_mm*500:.0f}um')
@@ -624,16 +624,15 @@ def compare_spindle_velocity(df1, df2, name1, name2):
     n1 = [data1.get(s, {}).get('n', 0) for s in all_stations]
     n2 = [data2.get(s, {}).get('n', 0) for s in all_stations]
     
-    # Updated: Pastel Colors + Soft Alphas
     ax.bar(x - width/2, means1, width, yerr=stds1, capsize=4, label=f'{name1} (n={sum(n1)})', color=THEME_BLUE, alpha=0.55, edgecolor='white')
-    ax.bar(x + width/2, means2, width, yerr=stds2, capsize=4, label=f'{name2} (n={sum(n2)})', color=THEME_ORANGE, alpha=0.55, edgecolor='white')
+    ax.bar(x + width/2, means2, width, yerr=stds2, capsize=4, label=f'{name2} (n={sum(n2)})', color=THEME_PURPLE, alpha=0.55, edgecolor='white')
     
     spec_a, spec_b = 1.1, 1.4
     ax.axhline(y=spec_a, color=THEME_GREEN, linestyle='--', linewidth=2, label=f'Grade A: <{spec_a} mm/s')
     ax.axhline(y=spec_b, color=THEME_ORANGE, linestyle='--', linewidth=2, label=f'Grade B: <{spec_b} mm/s')
     
     y_max = max(max(means1 + stds1, default=0), max(means2 + stds2, default=0), spec_b * 1.2)
-    ax.fill_between([-0.5, len(all_stations) - 0.5], spec_b, y_max, color=THEME_RED, alpha=0.1) # Softer red fill
+    ax.fill_between([-0.5, len(all_stations) - 0.5], spec_b, y_max, color=THEME_RED, alpha=0.1) 
     
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -695,9 +694,8 @@ def compare_spindle_acceleration(df1, df2, name1, name2):
     means2 = [data2.get(s, {}).get('mean', 0) for s in all_stations]
     stds2 = [data2.get(s, {}).get('std', 0) for s in all_stations]
     
-    # Updated: Pastel Colors + Soft Alphas
     ax.bar(x - width/2, means1, width, yerr=stds1, capsize=4, label=name1, color=THEME_BLUE, alpha=0.55, edgecolor='white')
-    ax.bar(x + width/2, means2, width, yerr=stds2, capsize=4, label=name2, color=THEME_ORANGE, alpha=0.55, edgecolor='white')
+    ax.bar(x + width/2, means2, width, yerr=stds2, capsize=4, label=name2, color=THEME_PURPLE, alpha=0.55, edgecolor='white')
     
     spec_a, spec_b = 10.0, 15.0
     ax.axhline(y=spec_a, color=THEME_GREEN, linestyle='--', linewidth=2, label=f'Grade A: <{spec_a}')
@@ -795,13 +793,12 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
         means2_closed = [m if not np.isnan(m) else 0 for m in means2]
         means2_closed += [means2_closed[0]]
         
-        # Transparent Overlay Data
         if not all(np.isnan(m) for m in means1):
             ax.plot(angles, means1_closed, color=THEME_BLUE, linewidth=2.0, label=f'{name1} Mean')
             ax.fill(angles, means1_closed, color=THEME_BLUE, alpha=0.35)
         if not all(np.isnan(m) for m in means2):
-            ax.plot(angles, means2_closed, color=THEME_RED, linewidth=2.0, label=f'{name2} Mean')
-            ax.fill(angles, means2_closed, color=THEME_RED, alpha=0.35)
+            ax.plot(angles, means2_closed, color=THEME_PURPLE, linewidth=2.0, label=f'{name2} Mean')
+            ax.fill(angles, means2_closed, color=THEME_PURPLE, alpha=0.35)
         
         ax.set_theta_offset(np.pi / 2)
         ax.set_theta_direction(-1)
@@ -827,9 +824,9 @@ def main():
     # Updated text gradient to match pastel aesthetic
     st.markdown("""
     <div class="animate-fade-in-up" style="text-align: center;">
-        <h1 style="font-size: 2.5rem; background: linear-gradient(135deg, #7A9CE0, #88CE95); 
+        <h1 style="font-size: 2.5rem; background: linear-gradient(135deg, #7A9CE0, #CDB4DB); 
                    -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-            🔧 Machine Tool Precision Comparison Analysis System
+            ⚙️ CNC Machine Precision Comparison Analysis System
         </h1>
         <p style="color: #9da3af; margin-top: 10px;">Compare and analyze machine tool precision across different factories</p>
     </div>
