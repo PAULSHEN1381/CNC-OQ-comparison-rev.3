@@ -197,7 +197,6 @@ def load_excel_data(file_content, factory_name, read_mode='default'):
         
         column_mapping = {}
         for col in df.columns:
-            # Check for Chinese substrings internally to support parsing
             col_clean = str(col).replace('\n', ' ').replace('（', '(').replace('）', ')').strip()
             if 'Station' in col_clean or '夹位' in col_clean: column_mapping[col] = 'CNC OP'
             elif 'Model' in col_clean and 'Probe' not in col_clean: column_mapping[col] = 'Machine Model'
@@ -233,6 +232,74 @@ def load_excel_data(file_content, factory_name, read_mode='default'):
         return df, None
     except Exception as e:
         return None, str(e)
+
+
+# ==========================================
+# Executive Summary Generator
+# ==========================================
+
+def generate_executive_summary(df1, df2, name1, name2):
+    summaries = []
+    
+    # 1. Age
+    age1 = datetime.now().year - df1['Year_of_manufacturer'].mean()
+    age2 = datetime.now().year - df2['Year_of_manufacturer'].mean()
+    if pd.notna(age1) and pd.notna(age2):
+        if abs(age1 - age2) < 0.5:
+            summaries.append(f"**Age Profile:** Both factories have similar average machine ages (~{age1:.1f} years).")
+        else:
+            better, worse = (name1, name2) if age1 < age2 else (name2, name1)
+            v_better, v_worse = min(age1, age2), max(age1, age2)
+            summaries.append(f"**Age Profile:** **{better}** has newer equipment on average ({v_better:.1f} yrs vs {v_worse:.1f} yrs).")
+
+    # 2. Spindle Runout
+    near1, _ = extract_spindle_runout_universal(df1, 'near')
+    near2, _ = extract_spindle_runout_universal(df2, 'near')
+    if near1 and near2:
+        m1, m2 = np.mean(near1) * 1000, np.mean(near2) * 1000
+        if abs(m1 - m2) < 0.5:
+            summaries.append(f"**Spindle Runout:** Both factories show comparable spindle precision (avg ~{m1:.1f} μm).")
+        else:
+            better, worse = (name1, name2) if m1 < m2 else (name2, name1)
+            v_better, v_worse = min(m1, m2), max(m1, m2)
+            summaries.append(f"**Spindle Runout:** **{better}** demonstrates tighter spindle precision (near-end avg {v_better:.1f} μm vs {v_worse:.1f} μm).")
+
+    # 3. Squareness
+    def get_sq_mean(df):
+        sq_cols = [c for c in df.columns if 'squareness' in str(c).lower() or '垂直度' in str(c)]
+        vals = []
+        for c in sq_cols:
+            v = pd.to_numeric(df[c], errors='coerce').dropna()
+            vals.extend([x * 1000 if x < 1 else x for x in v])
+        return np.mean(vals) if vals else np.nan
+    
+    sq1, sq2 = get_sq_mean(df1), get_sq_mean(df2)
+    if pd.notna(sq1) and pd.notna(sq2):
+        if abs(sq1 - sq2) < 1.0:
+            summaries.append(f"**Marble Squareness:** Both factories have similar overall geometric accuracy (avg deviation ~{sq1:.1f} μm).")
+        else:
+            better, worse = (name1, name2) if sq1 < sq2 else (name2, name1)
+            v_better, v_worse = min(sq1, sq2), max(sq1, sq2)
+            summaries.append(f"**Marble Squareness:** **{better}** has better overall geometric accuracy (avg deviation {v_better:.1f} μm vs {v_worse:.1f} μm).")
+
+    # 4. Vibration (Velocity)
+    def get_vel_mean(df):
+        v_cols = [c for c in df.columns if ('velocity' in str(c).lower() or '速度' in str(c)) and ('spindle' in str(c).lower() or '主轴' in str(c))]
+        vals = []
+        for c in v_cols:
+            vals.extend(pd.to_numeric(df[c], errors='coerce').dropna().tolist())
+        return np.mean(vals) if vals else np.nan
+    
+    v1, v2 = get_vel_mean(df1), get_vel_mean(df2)
+    if pd.notna(v1) and pd.notna(v2):
+        if abs(v1 - v2) < 0.1:
+            summaries.append(f"**Spindle Vibration:** Both factories exhibit similar spindle running stability (avg velocity ~{v1:.2f} mm/s).")
+        else:
+            better, worse = (name1, name2) if v1 < v2 else (name2, name1)
+            v_better, v_worse = min(v1, v2), max(v1, v2)
+            summaries.append(f"**Spindle Vibration:** **{better}** shows smoother spindle operation (avg velocity {v_better:.2f} mm/s vs {v_worse:.2f} mm/s).")
+
+    return summaries
 
 
 # ==========================================
@@ -289,7 +356,6 @@ def compare_machine_count(df1, df2, name1, name2):
     
     plt.tight_layout()
     
-    # English-only Dataframe for expanded view
     detail_df = pd.DataFrame({
         'CNC Station': compare_df['Station'],
         f'{name1} Models': compare_df[f'{name1}_Models'].apply(lambda x: ', '.join(map(str, x)) if isinstance(x, list) else '-'),
@@ -500,6 +566,7 @@ def compare_spindle_velocity(df1, df2, name1, name2):
     ax.bar(x - width/2, means1, width, yerr=stds1, capsize=4, label=f'{name1} (n={sum(n1)})', color=THEME_BLUE, alpha=0.55, edgecolor='white')
     ax.bar(x + width/2, means2, width, yerr=stds2, capsize=4, label=f'{name2} (n={sum(n2)})', color=THEME_PURPLE, alpha=0.55, edgecolor='white')
     
+    # 修正：Grade B 从 1.4 改为 1.8
     spec_a, spec_b = 1.1, 1.8
     ax.axhline(y=spec_a, color=THEME_GREEN, linestyle='--', linewidth=2, label=f'Grade A: <{spec_a} mm/s')
     ax.axhline(y=spec_b, color=THEME_ORANGE, linestyle='--', linewidth=2, label=f'Grade B: <{spec_b} mm/s')
@@ -596,7 +663,6 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
                 sq_cols = [c for c in df.columns if 'Squareness' in str(c) and (plane in str(c) or plane[::-1] in str(c))]
                 vals = [v * 1000 if (isinstance(v, (int, float)) and v < 1) else v for col in sq_cols for v in pd.to_numeric(station_df[col], errors='coerce').dropna()]
                 vals = [v for v in vals if not pd.isna(v)]
-                # 计算最大值和均值，但后续我们将主要使用 max
                 station_plane_data[plane] = {'mean': np.mean(vals), 'max': np.max(vals)} if vals else {'mean': np.nan, 'max': np.nan}
             if not all(np.isnan(station_plane_data[p]['max']) for p in directions): data[station] = station_plane_data
         return data
@@ -614,7 +680,6 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
     cols = min(4, n_stations)
     rows = int(np.ceil(n_stations / cols))
     
-    # 增加图表高度，为图例留出空间
     fig = plt.figure(figsize=(4 * cols, 4 * rows + 2.0))
     fig.patch.set_facecolor('none')
     
@@ -628,26 +693,23 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
         ax = fig.add_subplot(rows, cols, i + 1, projection='polar')
         ax.set_facecolor('none')
         
-        # 绘制规格参考线
         ax.plot(angles, spec_b_closed, color=THEME_ORANGE, linestyle='--', linewidth=1.5)
         ax.fill(angles, spec_b_closed, color=THEME_ORANGE, alpha=0.05)
         
         ax.plot(angles, spec_a_closed, color=THEME_GREEN, linestyle='--', linewidth=1.5)
         ax.fill(angles, spec_a_closed, color=THEME_GREEN, alpha=0.08)
         
-        # 获取最大值 (Max)
+        # 提取最大值 Max 
         max_vals1 = [data1.get(station, {}).get(p, {}).get('max', np.nan) for p in directions]
         max_vals2 = [data2.get(station, {}).get(p, {}).get('max', np.nan) for p in directions]
         
         max_vals1_closed = [m if not np.isnan(m) else 0 for m in max_vals1] + [[m if not np.isnan(m) else 0 for m in max_vals1][0]]
         max_vals2_closed = [m if not np.isnan(m) else 0 for m in max_vals2] + [[m if not np.isnan(m) else 0 for m in max_vals2][0]]
         
-        # 绘制 Factory A 的最大值，带有圆点标记 'o'
+        # 增加 Marker (星号 / 圆点)
         if not all(np.isnan(m) for m in max_vals1):
             ax.plot(angles, max_vals1_closed, color=THEME_BLUE, linewidth=2.0, marker='o', markersize=8, markerfacecolor='white', markeredgewidth=2)
             ax.fill(angles, max_vals1_closed, color=THEME_BLUE, alpha=0.35)
-            
-        # 绘制 Factory B 的最大值，带有星星标记 '*'
         if not all(np.isnan(m) for m in max_vals2):
             ax.plot(angles, max_vals2_closed, color=THEME_PURPLE, linewidth=2.0, marker='*', markersize=12, markerfacecolor='white', markeredgewidth=1.5)
             ax.fill(angles, max_vals2_closed, color=THEME_PURPLE, alpha=0.35)
@@ -659,30 +721,20 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
         ax.set_thetagrids(np.degrees(angles[:-1]), [f"{p}\n(A:{a}um, B:{b}um)" for p, a, b in zip(directions, spec_a, spec_b)], fontsize=10, color='#555')
         ax.set_title(station, y=1.2, fontsize=14, fontweight='bold', color='#333')
     
-    # --- 增加全局图例 ---
-    # 创建自定义图例线
+    # 添加全局图例
     custom_lines = [
         Line2D([0], [0], color=THEME_BLUE, lw=2.5, marker='o', markersize=8, markerfacecolor='white', markeredgewidth=2),
         Line2D([0], [0], color=THEME_PURPLE, lw=2.5, marker='*', markersize=12, markerfacecolor='white', markeredgewidth=1.5),
         Line2D([0], [0], color=THEME_GREEN, lw=2.0, linestyle='--'),
         Line2D([0], [0], color=THEME_ORANGE, lw=2.0, linestyle='--')
     ]
-    # 图例标签
-    legend_labels = [
-        f'{name1} (Max Val)', 
-        f'{name2} (Max Val)', 
-        'Grade A Spec', 
-        'Grade B Spec'
-    ]
-    
-    # 在主标题下方放置图例
+    legend_labels = [f'{name1} (Max Val)', f'{name2} (Max Val)', 'Grade A Spec', 'Grade B Spec']
     fig.legend(custom_lines, legend_labels, loc='upper center', bbox_to_anchor=(0.5, 0.94), ncol=4, frameon=True, facecolor='white', edgecolor=THEME_GRAY, fontsize=11)
     
     fig.suptitle('Marble Squareness Max Deviation by Station (Unit: um)', fontsize=18, fontweight='bold', color='#333', y=1.02)
-    
-    # 调整布局，避免标题、图例和雷达图重叠
     plt.tight_layout(rect=[0, 0, 1, 0.88])
     return fig_to_bytes(fig)
+
 
 # ==========================================
 # Main Streamlit UI
@@ -774,6 +826,7 @@ def main():
             progress_bar.empty()
             status_text.empty()
             
+            # Overview Metrics
             st.markdown("## 📊 Data Overview")
             cnc_col1, cnc_col2 = get_cnc_column_name(df1), get_cnc_column_name(df2)
             stations1 = int(df1[cnc_col1].nunique()) if cnc_col1 else 0
@@ -785,8 +838,30 @@ def main():
             with metric_cols[2]: display_animated_metric(f"Factory {factory2_name} - Records", f"{len(df2)}", animation_delay=0.2)
             with metric_cols[3]: display_animated_metric(f"Factory {factory2_name} - CNC Stations", f"{stations2}", animation_delay=0.3)
             
+            # Generate and Display Executive Summary
+            summaries = generate_executive_summary(df1, df2, factory1_name, factory2_name)
+            if summaries:
+                summary_html = """
+                <div class="animate-fade-in-up" style="
+                    background: linear-gradient(to right, rgba(155, 176, 226, 0.1), rgba(205, 180, 219, 0.1));
+                    border-radius: 12px;
+                    border-left: 6px solid #CDB4DB;
+                    padding: 20px 25px;
+                    margin: 30px 0 20px 0;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+                ">
+                    <h3 style="margin-top: 0; color: #3d4451; font-size: 18px; margin-bottom: 12px;">💡 Executive Summary</h3>
+                    <ul style="margin-bottom: 0; color: #4b5563; font-size: 15px; line-height: 1.8;">
+                """
+                for s in summaries:
+                    s_html = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color: #2d3748;">\1</strong>', s)
+                    summary_html += f"<li>{s_html}</li>"
+                summary_html += "</ul></div>"
+                st.markdown(summary_html, unsafe_allow_html=True)
+            
             st.markdown("---")
             
+            # Chart Rendering
             chart_sections = [
                 ("Machine Type Count Comparison", compare_machine_count),
                 ("Machine Age Comparison", compare_machine_age),
