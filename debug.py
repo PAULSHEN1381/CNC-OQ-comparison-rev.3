@@ -16,6 +16,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+from collections import defaultdict
 
 # Page configuration
 st.set_page_config(
@@ -235,9 +236,6 @@ def load_excel_data(file_content, factory_name, read_mode='default'):
 
 
 def extract_spindle_runout_universal(df, position='near'):
-    """
-    修改判断逻辑：大于 0.9 则除以 1000（修复值为 1 的边界情况）
-    """
     values = []
     position_patterns = [r'@5mm', r'@5\s*mm', r'5mm', r'5\s*mm', r'near'] if position == 'near' else [r'@300mm', r'@300\s*mm', r'300mm', r'@150mm', r'150mm', r'far']
     exclude_patterns = [r'@300', r'300mm', r'150mm', r'@150', r'far'] if position == 'near' else [r'@5mm', r'5mm', r'near']
@@ -265,7 +263,6 @@ def extract_spindle_runout_universal(df, position='near'):
             if col_needs_div1000:
                 converted_val = original_val / 1000
             
-            # 智能纠错：如果输入值 > 0.9，判定为是以 um 填写的
             if converted_val > 0.9:
                 converted_val = converted_val / 1000
                 
@@ -275,20 +272,25 @@ def extract_spindle_runout_universal(df, position='near'):
 
 
 # ==========================================
-# Comprehensive Grade A Rate Calculator
+# Comprehensive Grade A Calculator with Diagnosis
 # ==========================================
 
 def calculate_factory_grade_a_rate(df, factory_name):
     """
-    计算该工厂所有机台中，综合满足 Grade A 的机台占比。
-    如果一台机器同时通过了 Runout, Vibration, Squareness 的 Grade A 标准，才算 1 台 Grade A。
+    返回: 
+    1. Grade A 机台数
+    2. 总机台数
+    3. Grade B 降级明细诊断 (dict: {station: [reasons]})
     """
     total_machines = len(df)
-    if total_machines == 0: return 0, 0
+    if total_machines == 0: return 0, 0, {}
     
     grade_a_count = 0
+    grade_b_details = defaultdict(list)
     
-    # 1. 找出包含对应数据的列名
+    cnc_col = get_cnc_column_name(df)
+    if not cnc_col: return 0, 0, {}
+    
     runout_cols_near = []
     runout_cols_far = []
     
@@ -310,6 +312,8 @@ def calculate_factory_grade_a_rate(df, factory_name):
     
     for idx, row in df.iterrows():
         is_grade_a = True
+        station = row[cnc_col]
+        reasons = []
         
         # Check Runout
         for c in runout_cols_near:
@@ -318,7 +322,10 @@ def calculate_factory_grade_a_rate(df, factory_name):
                 col_str = str(c).lower()
                 if any(x in col_str for x in ['[µm]', '[μm]', 'micron', 'um]']) or ('mm' not in col_str): v /= 1000
                 if v > 0.9: v /= 1000
-                if v * 1000 > 6.0: is_grade_a = False
+                um_val = v * 1000
+                if um_val > 6.0: 
+                    is_grade_a = False
+                    reasons.append(f"Runout(5mm) {um_val:.1f}>6μm")
         
         for c in runout_cols_far:
             v = pd.to_numeric(row[c], errors='coerce')
@@ -326,43 +333,71 @@ def calculate_factory_grade_a_rate(df, factory_name):
                 col_str = str(c).lower()
                 if any(x in col_str for x in ['[µm]', '[μm]', 'micron', 'um]']) or ('mm' not in col_str): v /= 1000
                 if v > 0.9: v /= 1000
-                if v * 1000 > 30.0: is_grade_a = False
+                um_val = v * 1000
+                if um_val > 30.0: 
+                    is_grade_a = False
+                    reasons.append(f"Runout(300mm) {um_val:.1f}>30μm")
                 
         # Check Vibration
         for c in vib_cols:
             v = pd.to_numeric(row[c], errors='coerce')
-            if pd.notna(v) and v > 1.1: is_grade_a = False
+            if pd.notna(v) and v > 1.1: 
+                is_grade_a = False
+                reasons.append(f"Vibration {v:.2f}>1.1")
             
         # Check Squareness
         for c in sq_cols_xy:
             v = pd.to_numeric(row[c], errors='coerce')
             if pd.notna(v):
                 if v < 1: v *= 1000
-                if v > 16.0: is_grade_a = False
+                if v > 16.0: 
+                    is_grade_a = False
+                    reasons.append(f"Squareness(XY) {v:.1f}>16μm")
         for c in sq_cols_yz:
             v = pd.to_numeric(row[c], errors='coerce')
             if pd.notna(v):
                 if v < 1: v *= 1000
-                if v > 20.0: is_grade_a = False
+                if v > 20.0: 
+                    is_grade_a = False
+                    reasons.append(f"Squareness(YZ) {v:.1f}>20μm")
         for c in sq_cols_zx:
             v = pd.to_numeric(row[c], errors='coerce')
             if pd.notna(v):
                 if v < 1: v *= 1000
-                if v > 20.0: is_grade_a = False
+                if v > 20.0: 
+                    is_grade_a = False
+                    reasons.append(f"Squareness(ZX) {v:.1f}>20μm")
                 
         if is_grade_a:
             grade_a_count += 1
+        else:
+            # 记录降级原因，去重
+            unique_reasons = list(set(reasons))
+            grade_b_details[station].extend(unique_reasons)
             
-    return grade_a_count, total_machines
+    # 合并同 station 下的重复原因
+    final_details = {}
+    for st, res in grade_b_details.items():
+        if res:
+            # 简单去重并统计每个原因出现的频次作为概览
+            reason_counts = {}
+            for r in res:
+                # 提取原因的核心前缀，如 "Vibration" 或 "Runout(5mm)"
+                core_reason = r.split(' ')[0] 
+                reason_counts[core_reason] = reason_counts.get(core_reason, 0) + 1
+            final_details[st] = [f"{k} issues(x{v})" for k, v in reason_counts.items()]
+
+    return grade_a_count, total_machines, final_details
 
 
 # ==========================================
 # Executive Summary Generator
 # ==========================================
 
-def generate_executive_summary(df1, df2, name1, name2):
+def generate_executive_summary(df1, df2, name1, name2, gb_details1, gb_details2):
     compliance_summaries = []
     insight_summaries = []
+    diag_summaries = []
     
     cnc_col1 = get_cnc_column_name(df1)
     cnc_col2 = get_cnc_column_name(df2)
@@ -480,6 +515,15 @@ def generate_executive_summary(df1, df2, name1, name2):
     if sq_comp1 != "No Data" or sq_comp2 != "No Data":
         compliance_summaries.append(f"**Marble Squareness:** **{name1}** achieves {sq_comp1} | **{name2}** achieves {sq_comp2}")
 
+    # Grade B Diagnosis Summary
+    if gb_details1:
+        diag_str = " | ".join([f"**{st}** ({', '.join(rs)})" for st, res in gb_details1.items() for rs in [res]])
+        diag_summaries.append(f"**{name1}** Grade B factors found in: {diag_str}")
+    if gb_details2:
+        diag_str = " | ".join([f"**{st}** ({', '.join(rs)})" for st, res in gb_details2.items() for rs in [res]])
+        diag_summaries.append(f"**{name2}** Grade B factors found in: {diag_str}")
+
+    # Insights
     age1 = datetime.now().year - df1['Year_of_manufacturer'].mean()
     age2 = datetime.now().year - df2['Year_of_manufacturer'].mean()
     if pd.notna(age1) and pd.notna(age2):
@@ -533,7 +577,7 @@ def generate_executive_summary(df1, df2, name1, name2):
                 v_better, v_worse = min(v1, v2), max(v1, v2)
                 insight_summaries.append(f"**Vibration Variance:** Largest variance observed at station **{max_vel_st}**, with **{better}** running smoother (avg velocity {v_better:.2f} mm/s vs {v_worse:.2f} mm/s).")
 
-    return compliance_summaries, insight_summaries
+    return compliance_summaries, diag_summaries, insight_summaries
 
 
 # ==========================================
@@ -1039,13 +1083,13 @@ def main():
             
             st.markdown("## 📊 Data Overview")
             
-            # --- New Data Overview Metrics ---
             cnc_col1, cnc_col2 = get_cnc_column_name(df1), get_cnc_column_name(df2)
             stations1 = int(df1[cnc_col1].nunique()) if cnc_col1 else 0
             stations2 = int(df2[cnc_col2].nunique()) if cnc_col2 else 0
             
-            ga_count1, total_mac1 = calculate_factory_grade_a_rate(df1, factory1_name)
-            ga_count2, total_mac2 = calculate_factory_grade_a_rate(df2, factory2_name)
+            # --- New: Calculate Grade A Rate and get Diagnosis ---
+            ga_count1, total_mac1, gb_details1 = calculate_factory_grade_a_rate(df1, factory1_name)
+            ga_count2, total_mac2, gb_details2 = calculate_factory_grade_a_rate(df2, factory2_name)
             
             ga_rate1 = (ga_count1 / total_mac1 * 100) if total_mac1 > 0 else 0
             ga_rate2 = (ga_count2 / total_mac2 * 100) if total_mac2 > 0 else 0
@@ -1060,10 +1104,19 @@ def main():
             with metric_cols[3]: 
                 display_animated_metric(f"Factory {factory2_name} - Grade A Rate", f"{ga_rate2:.1f}%", f"{ga_count2} / {total_mac2} machines", animation_delay=0.3)
             
+            # 简要提示哪些工站包含 Grade B (如果有的话)
+            col_info1, col_info2 = st.columns(2)
+            with col_info1:
+                if gb_details1:
+                    st.info(f"**Stations with Grade B machines:** {', '.join(gb_details1.keys())}")
+            with col_info2:
+                if gb_details2:
+                    st.info(f"**Stations with Grade B machines:** {', '.join(gb_details2.keys())}")
+
             # --- Render Executive Summary ---
-            comp_sums, insight_sums = generate_executive_summary(df1, df2, factory1_name, factory2_name)
+            comp_sums, diag_sums, insight_sums = generate_executive_summary(df1, df2, factory1_name, factory2_name, gb_details1, gb_details2)
             
-            if comp_sums or insight_sums:
+            if comp_sums or insight_sums or diag_sums:
                 summary_html = f"<div class='animate-fade-in-up' style='background: linear-gradient(to right, rgba(155, 176, 226, 0.08), rgba(205, 180, 219, 0.08)); border-radius: 12px; border-left: 6px solid {THEME_PURPLE}; padding: 20px 30px; margin: 30px 0 25px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.03);'>"
                 summary_html += "<h2 style='margin-top: 0; color: #3d4451; font-size: 22px; margin-bottom: 15px;'>💡 Executive Summary</h2>"
                 
@@ -1071,6 +1124,14 @@ def main():
                     summary_html += "<h3 style='color: #4b5563; font-size: 16px; margin-top: 10px; margin-bottom: 10px; border-bottom: 1px solid #eaeaea; padding-bottom: 5px;'>🎯 Compliance & Grade Status</h3>"
                     summary_html += "<ul style='margin-bottom: 20px; color: #4b5563; font-size: 15px; line-height: 1.8;'>"
                     for s in comp_sums:
+                        s_html = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color: #2d3748;">\1</strong>', s)
+                        summary_html += f"<li>{s_html}</li>"
+                    summary_html += "</ul>"
+                    
+                if diag_sums:
+                    summary_html += "<h3 style='color: #4b5563; font-size: 16px; margin-top: 15px; margin-bottom: 10px; border-bottom: 1px solid #eaeaea; padding-bottom: 5px;'>🩺 Grade B Diagnosis Details</h3>"
+                    summary_html += "<ul style='margin-bottom: 20px; color: #4b5563; font-size: 15px; line-height: 1.8;'>"
+                    for s in diag_sums:
                         s_html = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color: #2d3748;">\1</strong>', s)
                         summary_html += f"<li>{s_html}</li>"
                     summary_html += "</ul>"
