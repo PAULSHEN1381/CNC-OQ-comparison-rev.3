@@ -19,21 +19,21 @@ from matplotlib.lines import Line2D
 
 # Page configuration
 st.set_page_config(
-    page_title="Machine Tool Precision Analysis",
+    page_title="CNC Machine Precision Analysis",
     page_icon="🔧",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # ==========================================
-# Color Theme: Pastel / Macaron (浅色半透明主题)
+# Color Theme: Pastel / Macaron
 # ==========================================
-THEME_BLUE = '#9BB0E2'    # 柔和长春花蓝 (Factory A)
-THEME_PURPLE = '#CDB4DB'  # 柔和丁香紫 / 浅紫 (Factory B)
-THEME_GREEN = '#A2D5AB'   # 柔和薄荷绿 (用于 Target / Grade A 标准线)
-THEME_ORANGE = '#F6B79D'  # 柔和蜜桃粉橘 (用于 Grade B 标准线)
-THEME_RED = '#F4A4A4'     # 柔和珊瑚红 (用于 USL 规格上限)
-THEME_GRAY = '#C5C9D1'    # 浅灰色 (用于网格和坐标轴)
+THEME_BLUE = '#9BB0E2'    # Soft Periwinkle Blue (Factory A)
+THEME_PURPLE = '#CDB4DB'  # Soft Lilac Purple (Factory B)
+THEME_GREEN = '#A2D5AB'   # Soft Mint Green (Target / Grade A)
+THEME_ORANGE = '#F6B79D'  # Soft Peach Orange (Grade B)
+THEME_RED = '#F4A4A4'     # Soft Coral Red (USL)
+THEME_GRAY = '#C5C9D1'    # Soft Gray (Grid and Axes)
 
 # Set font
 try:
@@ -197,6 +197,7 @@ def load_excel_data(file_content, factory_name, read_mode='default'):
         
         column_mapping = {}
         for col in df.columns:
+            # Check for Chinese substrings internally to support parsing
             col_clean = str(col).replace('\n', ' ').replace('（', '(').replace('）', ')').strip()
             if 'Station' in col_clean or '夹位' in col_clean: column_mapping[col] = 'CNC OP'
             elif 'Model' in col_clean and 'Probe' not in col_clean: column_mapping[col] = 'Machine Model'
@@ -246,7 +247,7 @@ def compare_machine_count(df1, df2, name1, name2):
     
     if cnc_col is None:
         ax.text(0.5, 0.5, "CNC Station column not found", ha='center', va='center', fontsize=14, color=THEME_GRAY)
-        return fig_to_bytes(fig) # Return just image if error
+        return fig_to_bytes(fig), None
     
     def get_detailed_counts(df):
         cnc_col_actual = get_cnc_column_name(df)
@@ -288,14 +289,13 @@ def compare_machine_count(df1, df2, name1, name2):
     
     plt.tight_layout()
     
-    # 【新增】构建详细型号的数据框，用于在图表下方展示
+    # English-only Dataframe for expanded view
     detail_df = pd.DataFrame({
         'CNC Station': compare_df['Station'],
-        f'{name1} Models (型号)': compare_df[f'{name1}_Models'].apply(lambda x: ', '.join(map(str, x)) if isinstance(x, list) else '-'),
-        f'{name2} Models (型号)': compare_df[f'{name2}_Models'].apply(lambda x: ', '.join(map(str, x)) if isinstance(x, list) else '-')
+        f'{name1} Models': compare_df[f'{name1}_Models'].apply(lambda x: ', '.join(map(str, x)) if isinstance(x, list) else '-'),
+        f'{name2} Models': compare_df[f'{name2}_Models'].apply(lambda x: ', '.join(map(str, x)) if isinstance(x, list) else '-')
     })
     
-    # 这里返回一个 Tuple (图片字节, 数据框)
     return fig_to_bytes(fig), detail_df
 
 
@@ -668,7 +668,7 @@ def main():
     <div class="animate-fade-in-up" style="text-align: center;">
         <h1 style="font-size: 2.5rem; background: linear-gradient(135deg, #7A9CE0, #CDB4DB); 
                    -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-            🔧 Machine Tool Precision Comparison Analysis System
+            🔧 CNC Machine Precision Comparison Analysis System
         </h1>
         <p style="color: #9da3af; margin-top: 10px;">Compare and analyze machine tool precision across different factories</p>
     </div>
@@ -777,7 +777,6 @@ def main():
                         show_shimmer_loading(400)
                     time.sleep(0.15 / speed_multiplier)
                     
-                    # 修改：处理函数可能返回Tuple (图片， 额外数据)
                     result = func(df1, df2, factory1_name, factory2_name)
                     if isinstance(result, tuple):
                         img_bytes, extra_data = result
@@ -787,10 +786,8 @@ def main():
                     shimmer_placeholder.empty()
                     display_animated_chart(img_bytes, title, idx)
                     
-                    # 【新增】如果有详细机台型号的数据框，就使用折叠面板显示
                     if extra_data is not None:
-                        with st.expander("📋 点击展开：查看各工站具体机台型号列表 (View Detailed Machine Models)", expanded=False):
-                            # Streamlit 1.28+ 支持 hide_index=True 隐藏最左侧索引
+                        with st.expander("📋 View Detailed Machine Models per Station", expanded=False):
                             try:
                                 st.dataframe(extra_data, hide_index=True, use_container_width=True)
                             except:
@@ -807,9 +804,8 @@ def main():
                         st.markdown(f"### {title}")
                         st.image(img_bytes, use_container_width=True)
                         
-                        # 【新增】无动画模式下同样显示折叠面板
                         if extra_data is not None:
-                            with st.expander("📋 点击展开：查看各工站具体机台型号列表 (View Detailed Machine Models)", expanded=False):
+                            with st.expander("📋 View Detailed Machine Models per Station", expanded=False):
                                 try:
                                     st.dataframe(extra_data, hide_index=True, use_container_width=True)
                                 except:
