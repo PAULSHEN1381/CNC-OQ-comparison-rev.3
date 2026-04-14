@@ -259,48 +259,151 @@ def extract_spindle_runout_universal(df, position='near'):
     return values, used_cols
 
 def generate_executive_summary(df1, df2, name1, name2):
-    summaries = []
+    compliance_summaries = []
+    insight_summaries = []
     
-    # 1. Age
+    cnc_col1 = get_cnc_column_name(df1)
+    cnc_col2 = get_cnc_column_name(df2)
+
+    # Helper: Extract Vibration by Station
+    def extract_vel_by_station(df, name):
+        cnc_col = get_cnc_column_name(df)
+        if not cnc_col: return {}
+        target_stations = ['CNC4', 'CNC4.1', 'CNC5', 'CNC6', 'CNC7', 'CNC7.2', 'CNC8']
+        df_f = df[df[cnc_col].isin(target_stations)]
+        read_mode = 'ipeg' if name.lower().startswith('ipeg') else 'default'
+        rpm_priority = [18000] if read_mode == 'ipeg' else [18000, 16000, 10000]
+        st_data = {}
+        for station in df_f[cnc_col].unique():
+            station_df = df_f[df_f[cnc_col] == station]
+            selected_col = None
+            for target_rpm in rpm_priority:
+                for col in station_df.columns:
+                    col_str = str(col).lower()
+                    if ('velocity' in col_str or '振动速度' in str(col)) and ('spindle' in col_str or '主轴' in str(col)) and str(target_rpm) in str(col):
+                        vals = pd.to_numeric(station_df[col], errors='coerce').dropna()
+                        if len(vals) > 0:
+                            selected_col = col
+                            break
+                if selected_col: break
+            if selected_col:
+                vals = pd.to_numeric(station_df[selected_col], errors='coerce').dropna()
+                if len(vals) > 0:
+                    st_data[station] = np.mean(vals) # Station mean
+        return st_data
+
+    # ==========================================
+    # 1. COMPLIANCE & GRADES (达标与等级状态)
+    # ==========================================
+
+    # A. Runout Compliance (Check if ALL in spec)
+    near1, _ = extract_spindle_runout_universal(df1, 'near')
+    near2, _ = extract_spindle_runout_universal(df2, 'near')
+    far1, _ = extract_spindle_runout_universal(df1, 'far')
+    far2, _ = extract_spindle_runout_universal(df2, 'far')
+
+    def check_runout(near_data, far_data):
+        near_max = max(near_data) * 1000 if near_data else 0
+        far_max = max(far_data) * 1000 if far_data else 0
+        if near_max == 0 and far_max == 0: return "No Data"
+        
+        issues = []
+        if near_max > 6.0: issues.append(f"Near-end {near_max:.1f}μm > 6μm")
+        if far_max > 30.0: issues.append(f"Far-end {far_max:.1f}μm > 30μm")
+        
+        if not issues: 
+            return f"<span style='color: {THEME_GREEN}; font-weight: bold;'>All In Spec</span>"
+        return f"<span style='color: {THEME_RED}; font-weight: bold;'>Out of Spec</span> ({', '.join(issues)})"
+
+    r_comp1 = check_runout(near1, far1)
+    r_comp2 = check_runout(near2, far2)
+    if "No Data" not in r_comp1 or "No Data" not in r_comp2:
+        compliance_summaries.append(f"**Spindle Runout:** **{name1}** is {r_comp1} | **{name2}** is {r_comp2}")
+
+    # B. Vibration Compliance (Grades)
+    vel1_st = extract_vel_by_station(df1, name1)
+    vel2_st = extract_vel_by_station(df2, name2)
+
+    def check_vib(st_data):
+        if not st_data: return "No Data", 0
+        max_v = max(st_data.values())
+        if max_v <= 1.1: 
+            return f"<span style='color: {THEME_GREEN}; font-weight: bold;'>Grade A</span>", max_v
+        elif max_v <= 1.8: 
+            return f"<span style='color: {THEME_ORANGE}; font-weight: bold;'>Grade B</span>", max_v
+        else: 
+            return f"<span style='color: {THEME_RED}; font-weight: bold;'>Out of Spec</span>", max_v
+
+    v_comp1, v_max1 = check_vib(vel1_st)
+    v_comp2, v_max2 = check_vib(vel2_st)
+    if v_max1 > 0 or v_max2 > 0:
+        compliance_summaries.append(f"**Spindle Vibration:** **{name1}** achieves {v_comp1} (Max {v_max1:.2f} mm/s) | **{name2}** achieves {v_comp2} (Max {v_max2:.2f} mm/s)")
+
+    # C. Squareness Compliance (Grades)
+    def get_sq_max_planes(df, cnc_col):
+        if not cnc_col: return {}
+        directions = ['XY', 'YZ', 'ZX']
+        max_planes = {'XY': 0, 'YZ': 0, 'ZX': 0}
+        for plane in directions:
+            sq_cols = [c for c in df.columns if 'squareness' in str(c).lower() or '垂直度' in str(c)]
+            plane_cols = [c for c in sq_cols if plane in str(c) or plane[::-1] in str(c)]
+            vals = []
+            for c in plane_cols:
+                v = pd.to_numeric(df[c], errors='coerce').dropna()
+                vals.extend([x * 1000 if x < 1 else x for x in v])
+            max_planes[plane] = max(vals) if vals else np.nan
+        return max_planes
+
+    sq_max1 = get_sq_max_planes(df1, cnc_col1)
+    sq_max2 = get_sq_max_planes(df2, cnc_col2)
+
+    def check_sq(max_planes):
+        if not max_planes or all(pd.isna(v) for v in max_planes.values()): return "No Data"
+        xy = max_planes.get('XY', np.nan)
+        yz = max_planes.get('YZ', np.nan)
+        zx = max_planes.get('ZX', np.nan)
+        
+        is_A, is_B = True, True
+        if pd.notna(xy):
+            if xy > 16.0: is_A = False
+            if xy > 20.0: is_B = False
+        if pd.notna(yz):
+            if yz > 20.0: is_A = False
+            if yz > 30.0: is_B = False
+        if pd.notna(zx):
+            if zx > 20.0: is_A = False
+            if zx > 30.0: is_B = False
+            
+        if is_A: 
+            return f"<span style='color: {THEME_GREEN}; font-weight: bold;'>Grade A</span>"
+        elif is_B: 
+            return f"<span style='color: {THEME_ORANGE}; font-weight: bold;'>Grade B</span>"
+        else: 
+            return f"<span style='color: {THEME_RED}; font-weight: bold;'>Out of Spec</span>"
+
+    sq_comp1 = check_sq(sq_max1)
+    sq_comp2 = check_sq(sq_max2)
+    if sq_comp1 != "No Data" or sq_comp2 != "No Data":
+        compliance_summaries.append(f"**Marble Squareness:** **{name1}** achieves {sq_comp1} | **{name2}** achieves {sq_comp2}")
+
+
+    # ==========================================
+    # 2. COMPARATIVE INSIGHTS (对比最大差异)
+    # ==========================================
+
+    # A. Age Comparison
     age1 = datetime.now().year - df1['Year_of_manufacturer'].mean()
     age2 = datetime.now().year - df2['Year_of_manufacturer'].mean()
     if pd.notna(age1) and pd.notna(age2):
         if abs(age1 - age2) < 0.5:
-            summaries.append(f"**Age Profile:** Both factories have similar average machine ages (~{age1:.1f} years).")
+            insight_summaries.append(f"**Age Profile:** Both factories have similar average machine ages (~{age1:.1f} years).")
         else:
             better, worse = (name1, name2) if age1 < age2 else (name2, name1)
             v_better, v_worse = min(age1, age2), max(age1, age2)
-            summaries.append(f"**Age Profile:** **{better}** has newer equipment on average ({v_better:.1f} yrs vs {v_worse:.1f} yrs).")
+            insight_summaries.append(f"**Age Profile:** **{better}** has newer equipment on average ({v_better:.1f} yrs vs {v_worse:.1f} yrs).")
 
-    # 2. Spindle Runout (Near / 5mm)
-    near1, _ = extract_spindle_runout_universal(df1, 'near')
-    near2, _ = extract_spindle_runout_universal(df2, 'near')
-    if near1 and near2:
-        m1, m2 = np.mean(near1) * 1000, np.mean(near2) * 1000
-        if abs(m1 - m2) < 0.5:
-            summaries.append(f"**Spindle Runout (5mm):** Both factories show comparable near-end precision (avg ~{m1:.1f} μm).")
-        else:
-            better, worse = (name1, name2) if m1 < m2 else (name2, name1)
-            v_better, v_worse = min(m1, m2), max(m1, m2)
-            summaries.append(f"**Spindle Runout (5mm):** **{better}** demonstrates tighter near-end precision (avg {v_better:.1f} μm vs {v_worse:.1f} μm).")
-
-    # 3. Spindle Runout (Far / 300mm)
-    far1, _ = extract_spindle_runout_universal(df1, 'far')
-    far2, _ = extract_spindle_runout_universal(df2, 'far')
-    if far1 and far2:
-        m1_far, m2_far = np.mean(far1) * 1000, np.mean(far2) * 1000
-        if abs(m1_far - m2_far) < 1.0:
-            summaries.append(f"**Spindle Runout (300mm):** Both factories show comparable precision at the far end (avg ~{m1_far:.1f} μm).")
-        else:
-            better, worse = (name1, name2) if m1_far < m2_far else (name2, name1)
-            v_better, v_worse = min(m1_far, m2_far), max(m1_far, m2_far)
-            summaries.append(f"**Spindle Runout (300mm):** **{better}** performs significantly better at 300mm (avg {v_better:.1f} μm vs {v_worse:.1f} μm).")
-
-    cnc_col1 = get_cnc_column_name(df1)
-    cnc_col2 = get_cnc_column_name(df2)
-
+    # B. Squareness Variance by Station
     if cnc_col1 and cnc_col2:
-        # 4. Squareness (Station-based largest variance)
         def get_sq_by_station(df, cnc_col):
             sq_cols = [c for c in df.columns if 'squareness' in str(c).lower() or '垂直度' in str(c)]
             st_data = {}
@@ -309,8 +412,7 @@ def generate_executive_summary(df1, df2, name1, name2):
                 for c in sq_cols:
                     v = pd.to_numeric(df[df[cnc_col] == station][c], errors='coerce').dropna()
                     vals.extend([x * 1000 if x < 1 else x for x in v])
-                if vals:
-                    st_data[station] = np.mean(vals)
+                if vals: st_data[station] = np.mean(vals)
             return st_data
 
         sq1_st = get_sq_by_station(df1, cnc_col1)
@@ -324,44 +426,14 @@ def generate_executive_summary(df1, df2, name1, name2):
                 if diff > max_sq_diff:
                     max_sq_diff = diff
                     max_sq_st = st_name
-            
             if max_sq_st:
                 v1, v2 = sq1_st[max_sq_st], sq2_st[max_sq_st]
                 better, worse = (name1, name2) if v1 < v2 else (name2, name1)
                 v_better, v_worse = min(v1, v2), max(v1, v2)
-                summaries.append(f"**Marble Squareness:** Largest variance found at station **{max_sq_st}**, where **{better}** has better geometry (avg {v_better:.1f} μm vs {v_worse:.1f} μm).")
+                insight_summaries.append(f"**Squareness Variance:** Largest variance found at station **{max_sq_st}**, where **{better}** has better geometry (avg deviation {v_better:.1f} μm vs {v_worse:.1f} μm).")
 
-        # 5. Vibration / Velocity (Station-based largest variance)
-        def extract_vel_by_station(df, name):
-            cnc_col = get_cnc_column_name(df)
-            if not cnc_col: return {}
-            target_stations = ['CNC4', 'CNC4.1', 'CNC5', 'CNC6', 'CNC7', 'CNC7.2', 'CNC8']
-            df_f = df[df[cnc_col].isin(target_stations)]
-            read_mode = 'ipeg' if name.lower().startswith('ipeg') else 'default'
-            rpm_priority = [18000] if read_mode == 'ipeg' else [18000, 16000, 10000]
-            st_data = {}
-            for station in df_f[cnc_col].unique():
-                station_df = df_f[df_f[cnc_col] == station]
-                selected_col = None
-                for target_rpm in rpm_priority:
-                    for col in station_df.columns:
-                        col_str = str(col).lower()
-                        if ('velocity' in col_str or '振动速度' in str(col)) and ('spindle' in col_str or '主轴' in str(col)) and str(target_rpm) in str(col):
-                            vals = pd.to_numeric(station_df[col], errors='coerce').dropna()
-                            if len(vals) > 0:
-                                selected_col = col
-                                break
-                    if selected_col: break
-                if selected_col:
-                    vals = pd.to_numeric(station_df[selected_col], errors='coerce').dropna()
-                    if len(vals) > 0:
-                        st_data[station] = np.mean(vals)
-            return st_data
-
-        vel1_st = extract_vel_by_station(df1, name1)
-        vel2_st = extract_vel_by_station(df2, name2)
+        # C. Vibration Variance by Station
         common_vel_stations = set(vel1_st.keys()).intersection(set(vel2_st.keys()))
-        
         if common_vel_stations:
             max_vel_diff, max_vel_st = -1, None
             for st_name in common_vel_stations:
@@ -369,14 +441,13 @@ def generate_executive_summary(df1, df2, name1, name2):
                 if diff > max_vel_diff:
                     max_vel_diff = diff
                     max_vel_st = st_name
-            
             if max_vel_st:
                 v1, v2 = vel1_st[max_vel_st], vel2_st[max_vel_st]
                 better, worse = (name1, name2) if v1 < v2 else (name2, name1)
                 v_better, v_worse = min(v1, v2), max(v1, v2)
-                summaries.append(f"**Spindle Vibration:** Largest variance observed at station **{max_vel_st}**, with **{better}** running smoother (avg {v_better:.2f} mm/s vs {v_worse:.2f} mm/s).")
+                insight_summaries.append(f"**Vibration Variance:** Largest variance observed at station **{max_vel_st}**, with **{better}** running smoother (avg velocity {v_better:.2f} mm/s vs {v_worse:.2f} mm/s).")
 
-    return summaries
+    return compliance_summaries, insight_summaries
 
 
 # ==========================================
@@ -890,29 +961,54 @@ def main():
             with metric_cols[2]: display_animated_metric(f"Factory {factory2_name} - Records", f"{len(df2)}", animation_delay=0.2)
             with metric_cols[3]: display_animated_metric(f"Factory {factory2_name} - CNC Stations", f"{stations2}", animation_delay=0.3)
             
-            # Show Executive Summary
-            summaries = generate_executive_summary(df1, df2, factory1_name, factory2_name)
-            if summaries:
-                summary_html = """
+            # --- Render Executive Summary ---
+            comp_sums, insight_sums = generate_executive_summary(df1, df2, factory1_name, factory2_name)
+            
+            if comp_sums or insight_sums:
+                summary_html = f"""
                 <div class="animate-fade-in-up" style="
-                    background: linear-gradient(to right, rgba(155, 176, 226, 0.1), rgba(205, 180, 219, 0.1));
+                    background: linear-gradient(to right, rgba(155, 176, 226, 0.08), rgba(205, 180, 219, 0.08));
                     border-radius: 12px;
-                    border-left: 6px solid #CDB4DB;
-                    padding: 20px 25px;
-                    margin: 30px 0 20px 0;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+                    border-left: 6px solid {THEME_PURPLE};
+                    padding: 20px 30px;
+                    margin: 30px 0 25px 0;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
                 ">
-                    <h3 style="margin-top: 0; color: #3d4451; font-size: 18px; margin-bottom: 12px;">💡 Executive Summary</h3>
-                    <ul style="margin-bottom: 0; color: #4b5563; font-size: 15px; line-height: 1.8;">
+                    <h2 style="margin-top: 0; color: #3d4451; font-size: 22px; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        💡 Executive Summary
+                    </h2>
                 """
-                for s in summaries:
-                    s_html = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color: #2d3748;">\1</strong>', s)
-                    summary_html += f"<li>{s_html}</li>"
-                summary_html += "</ul></div>"
+                
+                if comp_sums:
+                    summary_html += f"""
+                    <h3 style="color: #4b5563; font-size: 16px; margin-top: 10px; margin-bottom: 10px; border-bottom: 1px solid #eaeaea; padding-bottom: 5px;">
+                        🎯 Compliance & Grade Status
+                    </h3>
+                    <ul style="margin-bottom: 20px; color: #4b5563; font-size: 15px; line-height: 1.8;">
+                    """
+                    for s in comp_sums:
+                        s_html = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color: #2d3748;">\1</strong>', s)
+                        summary_html += f"<li>{s_html}</li>"
+                    summary_html += '</ul>'
+                    
+                if insight_sums:
+                    summary_html += f"""
+                    <h3 style="color: #4b5563; font-size: 16px; margin-top: 15px; margin-bottom: 10px; border-bottom: 1px solid #eaeaea; padding-bottom: 5px;">
+                        📊 Comparative Insights (Variance by Station)
+                    </h3>
+                    <ul style="margin-bottom: 0; color: #4b5563; font-size: 15px; line-height: 1.8;">
+                    """
+                    for s in insight_sums:
+                        s_html = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color: #2d3748;">\1</strong>', s)
+                        summary_html += f"<li>{s_html}</li>"
+                    summary_html += '</ul>'
+                    
+                summary_html += "</div>"
                 st.markdown(summary_html, unsafe_allow_html=True)
             
             st.markdown("---")
             
+            # Chart Rendering
             chart_sections = [
                 ("Machine Type Count Comparison", compare_machine_count),
                 ("Machine Age Comparison", compare_machine_age),
