@@ -596,8 +596,9 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
                 sq_cols = [c for c in df.columns if 'Squareness' in str(c) and (plane in str(c) or plane[::-1] in str(c))]
                 vals = [v * 1000 if (isinstance(v, (int, float)) and v < 1) else v for col in sq_cols for v in pd.to_numeric(station_df[col], errors='coerce').dropna()]
                 vals = [v for v in vals if not pd.isna(v)]
+                # 计算最大值和均值，但后续我们将主要使用 max
                 station_plane_data[plane] = {'mean': np.mean(vals), 'max': np.max(vals)} if vals else {'mean': np.nan, 'max': np.nan}
-            if not all(np.isnan(station_plane_data[p]['mean']) for p in directions): data[station] = station_plane_data
+            if not all(np.isnan(station_plane_data[p]['max']) for p in directions): data[station] = station_plane_data
         return data
     
     data1 = get_station_data(df1, cnc_col1)
@@ -613,7 +614,8 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
     cols = min(4, n_stations)
     rows = int(np.ceil(n_stations / cols))
     
-    fig = plt.figure(figsize=(4 * cols, 4 * rows + 1.5))
+    # 增加图表高度，为图例留出空间
+    fig = plt.figure(figsize=(4 * cols, 4 * rows + 2.0))
     fig.patch.set_facecolor('none')
     
     angles = np.linspace(0, 2 * np.pi, len(directions), endpoint=False).tolist()
@@ -626,24 +628,29 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
         ax = fig.add_subplot(rows, cols, i + 1, projection='polar')
         ax.set_facecolor('none')
         
+        # 绘制规格参考线
         ax.plot(angles, spec_b_closed, color=THEME_ORANGE, linestyle='--', linewidth=1.5)
         ax.fill(angles, spec_b_closed, color=THEME_ORANGE, alpha=0.05)
         
         ax.plot(angles, spec_a_closed, color=THEME_GREEN, linestyle='--', linewidth=1.5)
         ax.fill(angles, spec_a_closed, color=THEME_GREEN, alpha=0.08)
         
-        means1 = [data1.get(station, {}).get(p, {}).get('mean', np.nan) for p in directions]
-        means2 = [data2.get(station, {}).get(p, {}).get('mean', np.nan) for p in directions]
+        # 获取最大值 (Max)
+        max_vals1 = [data1.get(station, {}).get(p, {}).get('max', np.nan) for p in directions]
+        max_vals2 = [data2.get(station, {}).get(p, {}).get('max', np.nan) for p in directions]
         
-        means1_closed = [m if not np.isnan(m) else 0 for m in means1] + [[m if not np.isnan(m) else 0 for m in means1][0]]
-        means2_closed = [m if not np.isnan(m) else 0 for m in means2] + [[m if not np.isnan(m) else 0 for m in means2][0]]
+        max_vals1_closed = [m if not np.isnan(m) else 0 for m in max_vals1] + [[m if not np.isnan(m) else 0 for m in max_vals1][0]]
+        max_vals2_closed = [m if not np.isnan(m) else 0 for m in max_vals2] + [[m if not np.isnan(m) else 0 for m in max_vals2][0]]
         
-        if not all(np.isnan(m) for m in means1):
-            ax.plot(angles, means1_closed, color=THEME_BLUE, linewidth=2.0, label=f'{name1} Mean')
-            ax.fill(angles, means1_closed, color=THEME_BLUE, alpha=0.35)
-        if not all(np.isnan(m) for m in means2):
-            ax.plot(angles, means2_closed, color=THEME_PURPLE, linewidth=2.0, label=f'{name2} Mean')
-            ax.fill(angles, means2_closed, color=THEME_PURPLE, alpha=0.35)
+        # 绘制 Factory A 的最大值，带有圆点标记 'o'
+        if not all(np.isnan(m) for m in max_vals1):
+            ax.plot(angles, max_vals1_closed, color=THEME_BLUE, linewidth=2.0, marker='o', markersize=8, markerfacecolor='white', markeredgewidth=2)
+            ax.fill(angles, max_vals1_closed, color=THEME_BLUE, alpha=0.35)
+            
+        # 绘制 Factory B 的最大值，带有星星标记 '*'
+        if not all(np.isnan(m) for m in max_vals2):
+            ax.plot(angles, max_vals2_closed, color=THEME_PURPLE, linewidth=2.0, marker='*', markersize=12, markerfacecolor='white', markeredgewidth=1.5)
+            ax.fill(angles, max_vals2_closed, color=THEME_PURPLE, alpha=0.35)
         
         ax.set_theta_offset(np.pi / 2)
         ax.set_theta_direction(-1)
@@ -652,10 +659,30 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
         ax.set_thetagrids(np.degrees(angles[:-1]), [f"{p}\n(A:{a}um, B:{b}um)" for p, a, b in zip(directions, spec_a, spec_b)], fontsize=10, color='#555')
         ax.set_title(station, y=1.2, fontsize=14, fontweight='bold', color='#333')
     
-    fig.suptitle('Marble Squareness Profile by Station (Unit: um)', fontsize=18, fontweight='bold', color='#333')
-    plt.tight_layout(rect=[0, 0, 1, 0.92])
+    # --- 增加全局图例 ---
+    # 创建自定义图例线
+    custom_lines = [
+        Line2D([0], [0], color=THEME_BLUE, lw=2.5, marker='o', markersize=8, markerfacecolor='white', markeredgewidth=2),
+        Line2D([0], [0], color=THEME_PURPLE, lw=2.5, marker='*', markersize=12, markerfacecolor='white', markeredgewidth=1.5),
+        Line2D([0], [0], color=THEME_GREEN, lw=2.0, linestyle='--'),
+        Line2D([0], [0], color=THEME_ORANGE, lw=2.0, linestyle='--')
+    ]
+    # 图例标签
+    legend_labels = [
+        f'{name1} (Max Val)', 
+        f'{name2} (Max Val)', 
+        'Grade A Spec', 
+        'Grade B Spec'
+    ]
+    
+    # 在主标题下方放置图例
+    fig.legend(custom_lines, legend_labels, loc='upper center', bbox_to_anchor=(0.5, 0.94), ncol=4, frameon=True, facecolor='white', edgecolor=THEME_GRAY, fontsize=11)
+    
+    fig.suptitle('Marble Squareness Max Deviation by Station (Unit: um)', fontsize=18, fontweight='bold', color='#333', y=1.02)
+    
+    # 调整布局，避免标题、图例和雷达图重叠
+    plt.tight_layout(rect=[0, 0, 1, 0.88])
     return fig_to_bytes(fig)
-
 
 # ==========================================
 # Main Streamlit UI
