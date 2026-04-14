@@ -276,13 +276,6 @@ def extract_spindle_runout_universal(df, position='near'):
 # ==========================================
 
 def calculate_factory_grade_a_rate(df, factory_name):
-    """
-    返回: 
-    1. Grade A 机台数
-    2. 总机台数
-    3. Grade B 降级明细诊断 (dict: {station: [reasons]})
-    4. 100% Grade A 的 Station 列表
-    """
     total_machines = len(df)
     if total_machines == 0: return 0, 0, {}, []
     
@@ -292,7 +285,6 @@ def calculate_factory_grade_a_rate(df, factory_name):
     cnc_col = get_cnc_column_name(df)
     if not cnc_col: return 0, 0, {}, []
     
-    # 统计每个 Station 的总机器数和通过数
     station_stats = defaultdict(lambda: {'total': 0, 'passed': 0})
     
     runout_cols_near = []
@@ -405,32 +397,7 @@ def generate_executive_summary(df1, df2, name1, name2):
     cnc_col1 = get_cnc_column_name(df1)
     cnc_col2 = get_cnc_column_name(df2)
 
-    def extract_vel_by_station(df, name):
-        cnc_col = get_cnc_column_name(df)
-        if not cnc_col: return {}
-        target_stations = ['CNC4', 'CNC4.1', 'CNC5', 'CNC6', 'CNC7', 'CNC7.2', 'CNC8']
-        df_f = df[df[cnc_col].isin(target_stations)]
-        read_mode = 'ipeg' if name.lower().startswith('ipeg') else 'default'
-        rpm_priority = [18000] if read_mode == 'ipeg' else [18000, 16000, 10000]
-        st_data = {}
-        for station in df_f[cnc_col].unique():
-            station_df = df_f[df_f[cnc_col] == station]
-            selected_col = None
-            for target_rpm in rpm_priority:
-                for col in station_df.columns:
-                    col_str = str(col).lower()
-                    if ('velocity' in col_str or '振动速度' in str(col)) and ('spindle' in col_str or '主轴' in str(col)) and str(target_rpm) in str(col):
-                        vals = pd.to_numeric(station_df[col], errors='coerce').dropna()
-                        if len(vals) > 0:
-                            selected_col = col
-                            break
-                if selected_col: break
-            if selected_col:
-                vals = pd.to_numeric(station_df[selected_col], errors='coerce').dropna()
-                if len(vals) > 0:
-                    st_data[station] = np.mean(vals)
-        return st_data
-
+    # 1. Runout 
     near1 = extract_spindle_runout_universal(df1, 'near')
     near2 = extract_spindle_runout_universal(df2, 'near')
     far1 = extract_spindle_runout_universal(df1, 'far')
@@ -454,24 +421,99 @@ def generate_executive_summary(df1, df2, name1, name2):
     if "No Data" not in r_comp1 or "No Data" not in r_comp2:
         compliance_summaries.append(f"**Spindle Runout:** **{name1}** is {r_comp1} | **{name2}** is {r_comp2}")
 
-    vel1_st = extract_vel_by_station(df1, name1)
-    vel2_st = extract_vel_by_station(df2, name2)
-
-    def check_vib(st_data):
-        if not st_data: return "No Data", 0
+    # 2. Velocity Vibration (All Stations)
+    def check_all_station_velocity_vib(df, name):
+        cnc_col = get_cnc_column_name(df)
+        if not cnc_col: return "No Data", 0, []
+        read_mode = 'ipeg' if name.lower().startswith('ipeg') else 'default'
+        rpm_priority = [18000] if read_mode == 'ipeg' else [18000, 16000, 10000]
+        
+        st_data = {}
+        for station in df[cnc_col].dropna().unique():
+            station_df = df[df[cnc_col] == station]
+            selected_col = None
+            for target_rpm in rpm_priority:
+                for col in station_df.columns:
+                    col_str = str(col).lower()
+                    if ('velocity' in col_str or '振动速度' in str(col)) and ('spindle' in col_str or '主轴' in str(col)) and str(target_rpm) in str(col):
+                        vals = pd.to_numeric(station_df[col], errors='coerce').dropna()
+                        if len(vals) > 0:
+                            selected_col = col
+                            break
+                if selected_col: break
+            if selected_col:
+                vals = pd.to_numeric(station_df[selected_col], errors='coerce').dropna()
+                if len(vals) > 0: st_data[station] = np.mean(vals)
+        
+        if not st_data: return "No Data", 0, []
+        
         max_v = max(st_data.values())
-        if max_v <= 1.1: 
-            return f"<span style='color: {THEME_GREEN}; font-weight: bold;'>Grade A</span>", max_v
-        elif max_v <= 1.8: 
-            return f"<span style='color: {THEME_ORANGE}; font-weight: bold;'>Grade B</span>", max_v
-        else: 
-            return f"<span style='color: {THEME_RED}; font-weight: bold;'>Out of Spec</span>", max_v
+        grade_b_stations = [st for st, val in st_data.items() if 1.1 < val <= 1.8]
+        out_spec_stations = [st for st, val in st_data.items() if val > 1.8]
+        
+        status = ""
+        if out_spec_stations:
+            status = f"<span style='color: {THEME_RED}; font-weight: bold;'>Out of Spec</span>"
+        elif grade_b_stations:
+            status = f"<span style='color: {THEME_ORANGE}; font-weight: bold;'>Grade B</span>"
+        else:
+            status = f"<span style='color: {THEME_GREEN}; font-weight: bold;'>Grade A</span>"
+            
+        return status, max_v, grade_b_stations
 
-    v_comp1, v_max1 = check_vib(vel1_st)
-    v_comp2, v_max2 = check_vib(vel2_st)
-    if v_max1 > 0 or v_max2 > 0:
-        compliance_summaries.append(f"**Spindle Velocity Vibration:** **{name1}** achieves {v_comp1} (Max {v_max1:.2f} mm/s) | **{name2}** achieves {v_comp2} (Max {v_max2:.2f} mm/s)")
+    vvel_comp1, vvel_max1, vvel_gb1 = check_all_station_velocity_vib(df1, name1)
+    vvel_comp2, vvel_max2, vvel_gb2 = check_all_station_velocity_vib(df2, name2)
+    
+    if vvel_max1 > 0 or vvel_max2 > 0:
+        msg = f"**Spindle Velocity Vibration:** **{name1}** is {vvel_comp1}"
+        if vvel_gb1: msg += f" (Grade B: {', '.join(vvel_gb1)})"
+        msg += f" | **{name2}** is {vvel_comp2}"
+        if vvel_gb2: msg += f" (Grade B: {', '.join(vvel_gb2)})"
+        compliance_summaries.append(msg)
 
+    # 3. Acceleration Vibration (All Stations)
+    def check_all_station_accel_vib(df):
+        cnc_col = get_cnc_column_name(df)
+        if not cnc_col: return "No Data", 0, []
+        
+        st_data = {}
+        acc_cols = [c for c in df.columns if 'Acceleration' in str(c) and 'Spindle' in str(c)]
+        
+        for station in df[cnc_col].dropna().unique():
+            station_df = df[df[cnc_col] == station]
+            vals = []
+            for col in acc_cols:
+                vals.extend(pd.to_numeric(station_df[col], errors='coerce').dropna().tolist())
+            if vals: st_data[station] = np.mean(vals)
+            
+        if not st_data: return "No Data", 0, []
+        
+        max_a = max(st_data.values())
+        grade_b_stations = [st for st, val in st_data.items() if 10.0 < val <= 15.0]
+        out_spec_stations = [st for st, val in st_data.items() if val > 15.0]
+        
+        status = ""
+        if out_spec_stations:
+            status = f"<span style='color: {THEME_RED}; font-weight: bold;'>Out of Spec</span>"
+        elif grade_b_stations:
+            status = f"<span style='color: {THEME_ORANGE}; font-weight: bold;'>Grade B</span>"
+        else:
+            status = f"<span style='color: {THEME_GREEN}; font-weight: bold;'>Grade A</span>"
+            
+        return status, max_a, grade_b_stations
+
+    vacc_comp1, vacc_max1, vacc_gb1 = check_all_station_accel_vib(df1)
+    vacc_comp2, vacc_max2, vacc_gb2 = check_all_station_accel_vib(df2)
+
+    if vacc_max1 > 0 or vacc_max2 > 0:
+        msg = f"**Spindle Acceleration Vibration:** **{name1}** is {vacc_comp1}"
+        if vacc_gb1: msg += f" (Grade B: {', '.join(vacc_gb1)})"
+        msg += f" | **{name2}** is {vacc_comp2}"
+        if vacc_gb2: msg += f" (Grade B: {', '.join(vacc_gb2)})"
+        compliance_summaries.append(msg)
+
+
+    # 4. Squareness Compliance
     def get_sq_max_planes(df, cnc_col):
         if not cnc_col: return {}
         directions = ['XY', 'YZ', 'ZX']
@@ -518,6 +560,7 @@ def generate_executive_summary(df1, df2, name1, name2):
     if sq_comp1 != "No Data" or sq_comp2 != "No Data":
         compliance_summaries.append(f"**Marble Squareness:** **{name1}** achieves {sq_comp1} | **{name2}** achieves {sq_comp2}")
 
+    # 5. Age Insight
     age1 = datetime.now().year - df1['Year_of_manufacturer'].mean()
     age2 = datetime.now().year - df2['Year_of_manufacturer'].mean()
     if pd.notna(age1) and pd.notna(age2):
@@ -528,6 +571,7 @@ def generate_executive_summary(df1, df2, name1, name2):
             v_better, v_worse = min(age1, age2), max(age1, age2)
             insight_summaries.append(f"**Age Profile:** **{better}** has newer equipment on average ({v_better:.1f} yrs vs {v_worse:.1f} yrs).")
 
+    # 6. Comparative Insights (Variance)
     if cnc_col1 and cnc_col2:
         def get_sq_by_station(df, cnc_col):
             sq_cols = [c for c in df.columns if 'squareness' in str(c).lower() or '垂直度' in str(c)]
@@ -556,20 +600,6 @@ def generate_executive_summary(df1, df2, name1, name2):
                 better, worse = (name1, name2) if v1 < v2 else (name2, name1)
                 v_better, v_worse = min(v1, v2), max(v1, v2)
                 insight_summaries.append(f"**Squareness Variance:** Largest variance found at station **{max_sq_st}**, where **{better}** has better geometry (avg deviation {v_better:.1f} μm vs {v_worse:.1f} μm).")
-
-        common_vel_stations = set(vel1_st.keys()).intersection(set(vel2_st.keys()))
-        if common_vel_stations:
-            max_vel_diff, max_vel_st = -1, None
-            for st_name in common_vel_stations:
-                diff = abs(vel1_st[st_name] - vel2_st[st_name])
-                if diff > max_vel_diff:
-                    max_vel_diff = diff
-                    max_vel_st = st_name
-            if max_vel_st:
-                v1, v2 = vel1_st[max_vel_st], vel2_st[max_vel_st]
-                better, worse = (name1, name2) if v1 < v2 else (name2, name1)
-                v_better, v_worse = min(v1, v2), max(v1, v2)
-                insight_summaries.append(f"**Velocity Vibration Variance:** Largest variance observed at station **{max_vel_st}**, with **{better}** running smoother (avg velocity {v_better:.2f} mm/s vs {v_worse:.2f} mm/s).")
 
     return compliance_summaries, insight_summaries
 
@@ -905,7 +935,9 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
     directions = ['XY', 'YZ', 'ZX']
     spec_a, spec_b = [16.0, 20.0, 20.0], [20.0, 30.0, 30.0]
     
-    def get_station_data(df, cnc_col):
+    debug_records = []
+    
+    def get_station_data(df, cnc_col, factory_name):
         if cnc_col is None: return {}
         data = {}
         for station in df[cnc_col].dropna().unique():
@@ -913,14 +945,30 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
             station_plane_data = {}
             for plane in directions:
                 sq_cols = [c for c in df.columns if 'Squareness' in str(c) and (plane in str(c) or plane[::-1] in str(c))]
-                vals = [v * 1000 if (isinstance(v, (int, float)) and v < 1) else v for col in sq_cols for v in pd.to_numeric(station_df[col], errors='coerce').dropna()]
+                vals = []
+                for col in sq_cols:
+                    raw_series = pd.to_numeric(station_df[col], errors='coerce')
+                    valid_idx = raw_series.dropna().index
+                    for idx in valid_idx:
+                        raw_v = raw_series[idx]
+                        v_um = raw_v * 1000 if (isinstance(raw_v, (int, float)) and raw_v < 1) else raw_v
+                        vals.append(v_um)
+                        debug_records.append({
+                            'Factory': factory_name,
+                            'Station': station,
+                            'Plane': plane,
+                            'Column': col,
+                            'Original Value': raw_v,
+                            'Converted Value (μm)': v_um
+                        })
+                        
                 vals = [v for v in vals if not pd.isna(v)]
                 station_plane_data[plane] = {'mean': np.mean(vals), 'max': np.max(vals)} if vals else {'mean': np.nan, 'max': np.nan}
             if not all(np.isnan(station_plane_data[p]['max']) for p in directions): data[station] = station_plane_data
         return data
     
-    data1 = get_station_data(df1, cnc_col1)
-    data2 = get_station_data(df2, cnc_col2)
+    data1 = get_station_data(df1, cnc_col1, name1)
+    data2 = get_station_data(df2, cnc_col2, name2)
     
     all_stations = sorted(set(data1.keys()) | set(data2.keys()))
     if not all_stations:
@@ -982,7 +1030,10 @@ def compare_marble_squareness_combined(df1, df2, name1, name2):
     
     fig.suptitle('Marble Squareness Max Deviation by Station (Unit: um)', fontsize=18, fontweight='bold', color='#333', y=1.02)
     plt.tight_layout(rect=[0, 0, 1, 0.88])
-    return fig_to_bytes(fig), None
+    
+    debug_df = pd.DataFrame(debug_records) if debug_records else None
+    
+    return fig_to_bytes(fig), debug_df
 
 
 # ==========================================
@@ -1081,9 +1132,8 @@ def main():
             stations1 = int(df1[cnc_col1].nunique()) if cnc_col1 else 0
             stations2 = int(df2[cnc_col2].nunique()) if cnc_col2 else 0
             
-            # Extract Grade A Rate and Perfect Stations
-            ga_count1, total_mac1, _, perf_st1 = calculate_factory_grade_a_rate(df1, factory1_name)
-            ga_count2, total_mac2, _, perf_st2 = calculate_factory_grade_a_rate(df2, factory2_name)
+            ga_count1, total_mac1, _, _ = calculate_factory_grade_a_rate(df1, factory1_name)
+            ga_count2, total_mac2, _, _ = calculate_factory_grade_a_rate(df2, factory2_name)
             
             ga_rate1 = (ga_count1 / total_mac1 * 100) if total_mac1 > 0 else 0
             ga_rate2 = (ga_count2 / total_mac2 * 100) if total_mac2 > 0 else 0
@@ -1098,15 +1148,6 @@ def main():
             with metric_cols[3]: 
                 display_animated_metric(f"Factory {factory2_name} - Grade A Rate", f"{ga_rate2:.1f}%", f"{ga_count2} / {total_mac2} machines", animation_delay=0.3)
             
-            # Show 100% Grade A Stations
-            col_info1, col_info2 = st.columns(2)
-            with col_info1:
-                st_list1 = ', '.join(perf_st1) if perf_st1 else 'None'
-                st.info(f"**Stations with 100% Grade A machines:** {st_list1}")
-            with col_info2:
-                st_list2 = ', '.join(perf_st2) if perf_st2 else 'None'
-                st.info(f"**Stations with 100% Grade A machines:** {st_list2}")
-
             # --- Render Executive Summary ---
             comp_sums, insight_sums = generate_executive_summary(df1, df2, factory1_name, factory2_name)
             
@@ -1143,7 +1184,7 @@ def main():
                 ("Spindle Runout Comparison", compare_spindle_runout, None),
                 ("Spindle Velocity Vibration Comparison", compare_spindle_velocity, None),
                 ("Spindle Acceleration Vibration Comparison", compare_spindle_acceleration, None),
-                ("Marble Squareness Comparison", compare_marble_squareness_combined, None)
+                ("Marble Squareness Comparison", compare_marble_squareness_combined, "📋 View Squareness Extracted Data (Debug)")
             ]
             
             for idx, (title, func, expander_title) in enumerate(chart_sections):
