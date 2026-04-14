@@ -500,7 +500,7 @@ def compare_spindle_velocity(df1, df2, name1, name2):
     ax.bar(x - width/2, means1, width, yerr=stds1, capsize=4, label=f'{name1} (n={sum(n1)})', color=THEME_BLUE, alpha=0.55, edgecolor='white')
     ax.bar(x + width/2, means2, width, yerr=stds2, capsize=4, label=f'{name2} (n={sum(n2)})', color=THEME_PURPLE, alpha=0.55, edgecolor='white')
     
-    spec_a, spec_b = 1.1, 1.4
+    spec_a, spec_b = 1.1, 1.8
     ax.axhline(y=spec_a, color=THEME_GREEN, linestyle='--', linewidth=2, label=f'Grade A: <{spec_a} mm/s')
     ax.axhline(y=spec_b, color=THEME_ORANGE, linestyle='--', linewidth=2, label=f'Grade B: <{spec_b} mm/s')
     
