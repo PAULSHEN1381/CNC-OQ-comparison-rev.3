@@ -627,7 +627,7 @@ def generate_executive_summary(df1, df2, name1, name2):
     age2 = datetime.now().year - df2['Year_of_manufacturer'].mean()
     if pd.notna(age1) and pd.notna(age2):
         if abs(age1 - age2) < 0.5:
-            insight_summaries.append(f"**Age Profile:** Both factories have similar average machine ages (~{age1:.1f} years).")
+            insight_summaries.append(f"**Age Profile:** Both lines have similar average machine ages (~{age1:.1f} years).")
         else:
             better, worse = (name1, name2) if age1 < age2 else (name2, name1)
             v_better, v_worse = min(age1, age2), max(age1, age2)
@@ -1151,7 +1151,7 @@ def main():
                    -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
             🔧 CNC Machine Precision Comparison Analysis System
         </h1>
-        <p style="color: #9da3af; margin-top: 10px;">Compare and analyze machine tool precision across different factories</p>
+        <p style="color: #9da3af; margin-top: 10px;">Compare and analyze machine tool precision across different lines</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1160,14 +1160,14 @@ def main():
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div class="animate-fade-in-left">', unsafe_allow_html=True)
-        st.subheader("🏭 Factory A")
+        st.subheader("🏭 Line A")
         file1 = st.file_uploader("Upload Excel file", type=['xlsx', 'xls'], key="file1")
         if file1: st.success(f"✅ Uploaded: {file1.name}")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
         st.markdown('<div class="animate-fade-in-right">', unsafe_allow_html=True)
-        st.subheader("🏭 Factory B")
+        st.subheader("🏭 Line B")
         file2 = st.file_uploader("Upload Excel file", type=['xlsx', 'xls'], key="file2")
         if file2: st.success(f"✅ Uploaded: {file2.name}")
         st.markdown('</div>', unsafe_allow_html=True)
@@ -1199,17 +1199,17 @@ def main():
             
             read_mode1 = 'ipeg' if name1.lower().startswith('ipeg') else 'default'
             read_mode2 = 'ipeg' if name2.lower().startswith('ipeg') else 'default'
-            factory1_name, factory2_name = extract_factory_name(name1), extract_factory_name(name2)
+            line1_name, factory2_name = extract_factory_name(name1), extract_factory_name(name2)
             
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            status_text.markdown("*Loading Factory A data...*")
+            status_text.markdown("*Loading Line A data...*")
             progress_bar.progress(10)
-            df1, err1 = load_excel_data(content1, factory1_name, read_mode=read_mode1)
+            df1, err1 = load_excel_data(content1, line1_name, read_mode=read_mode1)
             time.sleep(0.2 / speed_multiplier)
             
-            status_text.markdown("*Loading Factory B data...*")
+            status_text.markdown("*Loading Line B data...*")
             progress_bar.progress(25)
             df2, err2 = load_excel_data(content2, factory2_name, read_mode=read_mode2)
             time.sleep(0.2 / speed_multiplier)
@@ -1234,7 +1234,7 @@ def main():
             stations1 = int(df1[cnc_col1].nunique()) if cnc_col1 else 0
             stations2 = int(df2[cnc_col2].nunique()) if cnc_col2 else 0
             
-            ga_count1, total_mac1, _, _ = calculate_factory_grade_a_rate(df1, factory1_name)
+            ga_count1, total_mac1, _, _ = calculate_factory_grade_a_rate(df1, line1_name)
             ga_count2, total_mac2, _, _ = calculate_factory_grade_a_rate(df2, factory2_name)
             
             ga_rate1 = (ga_count1 / total_mac1 * 100) if total_mac1 > 0 else 0
@@ -1242,16 +1242,16 @@ def main():
             
             metric_cols = st.columns(4)
             with metric_cols[0]: 
-                display_animated_metric(f"Factory {factory1_name} - CNC Stations", f"{stations1}", animation_delay=0)
+                display_animated_metric(f"Line {line1_name} - CNC Stations", f"{stations1}", animation_delay=0)
             with metric_cols[1]: 
-                display_animated_metric(f"Factory {factory1_name} - Grade A Rate", f"{ga_rate1:.1f}%", f"{ga_count1} / {total_mac1} machines", animation_delay=0.1)
+                display_animated_metric(f"Line {line1_name} - Grade A Rate", f"{ga_rate1:.1f}%", f"{ga_count1} / {total_mac1} machines", animation_delay=0.1)
             with metric_cols[2]: 
-                display_animated_metric(f"Factory {factory2_name} - CNC Stations", f"{stations2}", animation_delay=0.2)
+                display_animated_metric(f"Line {factory2_name} - CNC Stations", f"{stations2}", animation_delay=0.2)
             with metric_cols[3]: 
-                display_animated_metric(f"Factory {factory2_name} - Grade A Rate", f"{ga_rate2:.1f}%", f"{ga_count2} / {total_mac2} machines", animation_delay=0.3)
+                display_animated_metric(f"Line {factory2_name} - Grade A Rate", f"{ga_rate2:.1f}%", f"{ga_count2} / {total_mac2} machines", animation_delay=0.3)
 
             # --- Render Executive Summary ---
-            comp_sums, insight_sums = generate_executive_summary(df1, df2, factory1_name, factory2_name)
+            comp_sums, insight_sums = generate_executive_summary(df1, df2, line1_name, factory2_name)
             
             if comp_sums or insight_sums:
                 summary_html = f"<div class='animate-fade-in-up' style='background: linear-gradient(to right, rgba(155, 176, 226, 0.08), rgba(205, 180, 219, 0.08)); border-radius: 12px; border-left: 6px solid {THEME_PURPLE}; padding: 20px 30px; margin: 30px 0 25px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.03);'>"
@@ -1297,7 +1297,7 @@ def main():
                         show_shimmer_loading(400)
                     time.sleep(0.15 / speed_multiplier)
                     
-                    result = func(df1, df2, factory1_name, factory2_name)
+                    result = func(df1, df2, line1_name, factory2_name)
                     if isinstance(result, tuple):
                         img_bytes, extra_data = result
                     else:
@@ -1315,7 +1315,7 @@ def main():
                                 
                 else:
                     with st.spinner(f"Generating {title}..."):
-                        result = func(df1, df2, factory1_name, factory2_name)
+                        result = func(df1, df2, line1_name, factory2_name)
                         if isinstance(result, tuple):
                             img_bytes, extra_data = result
                         else:
