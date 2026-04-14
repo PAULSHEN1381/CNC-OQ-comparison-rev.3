@@ -792,7 +792,6 @@ def _plot_runout_distribution(ax, data1, data2, name1, name2, usl_mm, title):
     ax.spines['right'].set_visible(False)
 
 def compare_spindle_velocity(df1, df2, name1, name2):
-    target_stations = ['CNC4', 'CNC4.1', 'CNC5', 'CNC6', 'CNC7', 'CNC7.2', 'CNC8']
     cnc_col = get_cnc_column_name(df1)
     
     fig, ax = plt.subplots(figsize=(14, 7))
@@ -806,13 +805,11 @@ def compare_spindle_velocity(df1, df2, name1, name2):
     def extract_velocity_data(df, read_mode='default'):
         cnc_col_actual = get_cnc_column_name(df)
         if cnc_col_actual is None: return {}
-        df_f = df[df[cnc_col_actual].isin(target_stations)]
-        if df_f.empty: return {}
         
         extracted_data = {}
         rpm_priority = [18000] if read_mode == 'ipeg' else [18000, 16000, 10000]
-        for station in df_f[cnc_col_actual].unique():
-            station_df = df_f[df_f[cnc_col_actual] == station]
+        for station in df[cnc_col_actual].dropna().unique():
+            station_df = df[df[cnc_col_actual] == station]
             selected_col, selected_rpm = None, None
             for target_rpm in rpm_priority:
                 for col in station_df.columns:
@@ -868,7 +865,6 @@ def compare_spindle_velocity(df1, df2, name1, name2):
     return fig_to_bytes(fig), None
 
 def compare_spindle_acceleration(df1, df2, name1, name2):
-    target_stations = ['CNC4', 'CNC4.1', 'CNC5', 'CNC6', 'CNC7', 'CNC7.2', 'CNC8']
     cnc_col = get_cnc_column_name(df1)
     
     fig, ax = plt.subplots(figsize=(14, 7))
@@ -882,11 +878,10 @@ def compare_spindle_acceleration(df1, df2, name1, name2):
     def extract_data(df):
         cnc_col_actual = get_cnc_column_name(df)
         if cnc_col_actual is None: return {}
-        df_f = df[df[cnc_col_actual].isin(target_stations)]
-        acc_cols = [c for c in df_f.columns if 'Acceleration' in str(c) and 'Spindle' in str(c)]
+        acc_cols = [c for c in df.columns if 'Acceleration' in str(c) and 'Spindle' in str(c)]
         data = {}
-        for station in df_f[cnc_col_actual].unique():
-            station_df = df_f[df_f[cnc_col_actual] == station]
+        for station in df[cnc_col_actual].dropna().unique():
+            station_df = df[df[cnc_col_actual] == station]
             vals = []
             for col in acc_cols:
                 vals.extend(pd.to_numeric(station_df[col], errors='coerce').dropna().tolist())
