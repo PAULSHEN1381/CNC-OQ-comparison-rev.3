@@ -265,7 +265,6 @@ def generate_executive_summary(df1, df2, name1, name2):
     cnc_col1 = get_cnc_column_name(df1)
     cnc_col2 = get_cnc_column_name(df2)
 
-    # Helper: Extract Vibration by Station
     def extract_vel_by_station(df, name):
         cnc_col = get_cnc_column_name(df)
         if not cnc_col: return {}
@@ -289,14 +288,10 @@ def generate_executive_summary(df1, df2, name1, name2):
             if selected_col:
                 vals = pd.to_numeric(station_df[selected_col], errors='coerce').dropna()
                 if len(vals) > 0:
-                    st_data[station] = np.mean(vals) # Station mean
+                    st_data[station] = np.mean(vals)
         return st_data
 
-    # ==========================================
-    # 1. COMPLIANCE & GRADES (达标与等级状态)
-    # ==========================================
-
-    # A. Runout Compliance (Check if ALL in spec)
+    # A. Runout Compliance
     near1, _ = extract_spindle_runout_universal(df1, 'near')
     near2, _ = extract_spindle_runout_universal(df2, 'near')
     far1, _ = extract_spindle_runout_universal(df1, 'far')
@@ -320,7 +315,7 @@ def generate_executive_summary(df1, df2, name1, name2):
     if "No Data" not in r_comp1 or "No Data" not in r_comp2:
         compliance_summaries.append(f"**Spindle Runout:** **{name1}** is {r_comp1} | **{name2}** is {r_comp2}")
 
-    # B. Vibration Compliance (Grades)
+    # B. Vibration Compliance
     vel1_st = extract_vel_by_station(df1, name1)
     vel2_st = extract_vel_by_station(df2, name2)
 
@@ -339,7 +334,7 @@ def generate_executive_summary(df1, df2, name1, name2):
     if v_max1 > 0 or v_max2 > 0:
         compliance_summaries.append(f"**Spindle Vibration:** **{name1}** achieves {v_comp1} (Max {v_max1:.2f} mm/s) | **{name2}** achieves {v_comp2} (Max {v_max2:.2f} mm/s)")
 
-    # C. Squareness Compliance (Grades)
+    # C. Squareness Compliance
     def get_sq_max_planes(df, cnc_col):
         if not cnc_col: return {}
         directions = ['XY', 'YZ', 'ZX']
@@ -386,12 +381,7 @@ def generate_executive_summary(df1, df2, name1, name2):
     if sq_comp1 != "No Data" or sq_comp2 != "No Data":
         compliance_summaries.append(f"**Marble Squareness:** **{name1}** achieves {sq_comp1} | **{name2}** achieves {sq_comp2}")
 
-
-    # ==========================================
-    # 2. COMPARATIVE INSIGHTS (对比最大差异)
-    # ==========================================
-
-    # A. Age Comparison
+    # D. Age Insight
     age1 = datetime.now().year - df1['Year_of_manufacturer'].mean()
     age2 = datetime.now().year - df2['Year_of_manufacturer'].mean()
     if pd.notna(age1) and pd.notna(age2):
@@ -402,7 +392,7 @@ def generate_executive_summary(df1, df2, name1, name2):
             v_better, v_worse = min(age1, age2), max(age1, age2)
             insight_summaries.append(f"**Age Profile:** **{better}** has newer equipment on average ({v_better:.1f} yrs vs {v_worse:.1f} yrs).")
 
-    # B. Squareness Variance by Station
+    # E. Squareness & Vibration Insights
     if cnc_col1 and cnc_col2:
         def get_sq_by_station(df, cnc_col):
             sq_cols = [c for c in df.columns if 'squareness' in str(c).lower() or '垂直度' in str(c)]
@@ -432,7 +422,6 @@ def generate_executive_summary(df1, df2, name1, name2):
                 v_better, v_worse = min(v1, v2), max(v1, v2)
                 insight_summaries.append(f"**Squareness Variance:** Largest variance found at station **{max_sq_st}**, where **{better}** has better geometry (avg deviation {v_better:.1f} μm vs {v_worse:.1f} μm).")
 
-        # C. Vibration Variance by Station
         common_vel_stations = set(vel1_st.keys()).intersection(set(vel2_st.keys()))
         if common_vel_stations:
             max_vel_diff, max_vel_st = -1, None
@@ -965,45 +954,28 @@ def main():
             comp_sums, insight_sums = generate_executive_summary(df1, df2, factory1_name, factory2_name)
             
             if comp_sums or insight_sums:
-                summary_html = f"""
-                <div class="animate-fade-in-up" style="
-                    background: linear-gradient(to right, rgba(155, 176, 226, 0.08), rgba(205, 180, 219, 0.08));
-                    border-radius: 12px;
-                    border-left: 6px solid {THEME_PURPLE};
-                    padding: 20px 30px;
-                    margin: 30px 0 25px 0;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
-                ">
-                    <h2 style="margin-top: 0; color: #3d4451; font-size: 22px; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                        💡 Executive Summary
-                    </h2>
-                """
+                # 把 HTML 拍扁，避免带有 4 个空格的缩进被解析为 Markdown 的代码块 (Code Block)
+                summary_html = f"<div class='animate-fade-in-up' style='background: linear-gradient(to right, rgba(155, 176, 226, 0.08), rgba(205, 180, 219, 0.08)); border-radius: 12px; border-left: 6px solid {THEME_PURPLE}; padding: 20px 30px; margin: 30px 0 25px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.03);'>"
+                summary_html += "<h2 style='margin-top: 0; color: #3d4451; font-size: 22px; margin-bottom: 15px;'>💡 Executive Summary</h2>"
                 
                 if comp_sums:
-                    summary_html += f"""
-                    <h3 style="color: #4b5563; font-size: 16px; margin-top: 10px; margin-bottom: 10px; border-bottom: 1px solid #eaeaea; padding-bottom: 5px;">
-                        🎯 Compliance & Grade Status
-                    </h3>
-                    <ul style="margin-bottom: 20px; color: #4b5563; font-size: 15px; line-height: 1.8;">
-                    """
+                    summary_html += "<h3 style='color: #4b5563; font-size: 16px; margin-top: 10px; margin-bottom: 10px; border-bottom: 1px solid #eaeaea; padding-bottom: 5px;'>🎯 Compliance & Grade Status</h3>"
+                    summary_html += "<ul style='margin-bottom: 20px; color: #4b5563; font-size: 15px; line-height: 1.8;'>"
                     for s in comp_sums:
                         s_html = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color: #2d3748;">\1</strong>', s)
                         summary_html += f"<li>{s_html}</li>"
-                    summary_html += '</ul>'
+                    summary_html += "</ul>"
                     
                 if insight_sums:
-                    summary_html += f"""
-                    <h3 style="color: #4b5563; font-size: 16px; margin-top: 15px; margin-bottom: 10px; border-bottom: 1px solid #eaeaea; padding-bottom: 5px;">
-                        📊 Comparative Insights (Variance by Station)
-                    </h3>
-                    <ul style="margin-bottom: 0; color: #4b5563; font-size: 15px; line-height: 1.8;">
-                    """
+                    summary_html += "<h3 style='color: #4b5563; font-size: 16px; margin-top: 15px; margin-bottom: 10px; border-bottom: 1px solid #eaeaea; padding-bottom: 5px;'>📊 Comparative Insights (Variance by Station)</h3>"
+                    summary_html += "<ul style='margin-bottom: 0; color: #4b5563; font-size: 15px; line-height: 1.8;'>"
                     for s in insight_sums:
                         s_html = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color: #2d3748;">\1</strong>', s)
                         summary_html += f"<li>{s_html}</li>"
-                    summary_html += '</ul>'
+                    summary_html += "</ul>"
                     
                 summary_html += "</div>"
+                
                 st.markdown(summary_html, unsafe_allow_html=True)
             
             st.markdown("---")
