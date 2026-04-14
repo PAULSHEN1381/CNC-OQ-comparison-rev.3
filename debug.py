@@ -281,15 +281,19 @@ def calculate_factory_grade_a_rate(df, factory_name):
     1. Grade A 机台数
     2. 总机台数
     3. Grade B 降级明细诊断 (dict: {station: [reasons]})
+    4. 100% Grade A 的 Station 列表
     """
     total_machines = len(df)
-    if total_machines == 0: return 0, 0, {}
+    if total_machines == 0: return 0, 0, {}, []
     
     grade_a_count = 0
     grade_b_details = defaultdict(list)
     
     cnc_col = get_cnc_column_name(df)
-    if not cnc_col: return 0, 0, {}
+    if not cnc_col: return 0, 0, {}, []
+    
+    # 统计每个 Station 的总机器数和通过数
+    station_stats = defaultdict(lambda: {'total': 0, 'passed': 0})
     
     runout_cols_near = []
     runout_cols_far = []
@@ -314,6 +318,7 @@ def calculate_factory_grade_a_rate(df, factory_name):
         is_grade_a = True
         station = row[cnc_col]
         reasons = []
+        station_stats[station]['total'] += 1
         
         # Check Runout
         for c in runout_cols_near:
@@ -370,34 +375,32 @@ def calculate_factory_grade_a_rate(df, factory_name):
                 
         if is_grade_a:
             grade_a_count += 1
+            station_stats[station]['passed'] += 1
         else:
-            # 记录降级原因，去重
             unique_reasons = list(set(reasons))
             grade_b_details[station].extend(unique_reasons)
             
-    # 合并同 station 下的重复原因
     final_details = {}
-    for st, res in grade_b_details.items():
+    for st_name, res in grade_b_details.items():
         if res:
-            # 简单去重并统计每个原因出现的频次作为概览
             reason_counts = {}
             for r in res:
-                # 提取原因的核心前缀，如 "Vibration" 或 "Runout(5mm)"
                 core_reason = r.split(' ')[0] 
                 reason_counts[core_reason] = reason_counts.get(core_reason, 0) + 1
-            final_details[st] = [f"{k} issues(x{v})" for k, v in reason_counts.items()]
+            final_details[st_name] = [f"{k} issues(x{v})" for k, v in reason_counts.items()]
 
-    return grade_a_count, total_machines, final_details
+    perfect_stations = [s for s, stats_dict in station_stats.items() if stats_dict['total'] > 0 and stats_dict['passed'] == stats_dict['total']]
+
+    return grade_a_count, total_machines, final_details, perfect_stations
 
 
 # ==========================================
 # Executive Summary Generator
 # ==========================================
 
-def generate_executive_summary(df1, df2, name1, name2, gb_details1, gb_details2):
+def generate_executive_summary(df1, df2, name1, name2):
     compliance_summaries = []
     insight_summaries = []
-    diag_summaries = []
     
     cnc_col1 = get_cnc_column_name(df1)
     cnc_col2 = get_cnc_column_name(df2)
@@ -467,7 +470,7 @@ def generate_executive_summary(df1, df2, name1, name2, gb_details1, gb_details2)
     v_comp1, v_max1 = check_vib(vel1_st)
     v_comp2, v_max2 = check_vib(vel2_st)
     if v_max1 > 0 or v_max2 > 0:
-        compliance_summaries.append(f"**Spindle Vibration:** **{name1}** achieves {v_comp1} (Max {v_max1:.2f} mm/s) | **{name2}** achieves {v_comp2} (Max {v_max2:.2f} mm/s)")
+        compliance_summaries.append(f"**Spindle Velocity Vibration:** **{name1}** achieves {v_comp1} (Max {v_max1:.2f} mm/s) | **{name2}** achieves {v_comp2} (Max {v_max2:.2f} mm/s)")
 
     def get_sq_max_planes(df, cnc_col):
         if not cnc_col: return {}
@@ -515,15 +518,6 @@ def generate_executive_summary(df1, df2, name1, name2, gb_details1, gb_details2)
     if sq_comp1 != "No Data" or sq_comp2 != "No Data":
         compliance_summaries.append(f"**Marble Squareness:** **{name1}** achieves {sq_comp1} | **{name2}** achieves {sq_comp2}")
 
-    # Grade B Diagnosis Summary
-    if gb_details1:
-        diag_str = " | ".join([f"**{st}** ({', '.join(rs)})" for st, res in gb_details1.items() for rs in [res]])
-        diag_summaries.append(f"**{name1}** Grade B factors found in: {diag_str}")
-    if gb_details2:
-        diag_str = " | ".join([f"**{st}** ({', '.join(rs)})" for st, res in gb_details2.items() for rs in [res]])
-        diag_summaries.append(f"**{name2}** Grade B factors found in: {diag_str}")
-
-    # Insights
     age1 = datetime.now().year - df1['Year_of_manufacturer'].mean()
     age2 = datetime.now().year - df2['Year_of_manufacturer'].mean()
     if pd.notna(age1) and pd.notna(age2):
@@ -575,9 +569,9 @@ def generate_executive_summary(df1, df2, name1, name2, gb_details1, gb_details2)
                 v1, v2 = vel1_st[max_vel_st], vel2_st[max_vel_st]
                 better, worse = (name1, name2) if v1 < v2 else (name2, name1)
                 v_better, v_worse = min(v1, v2), max(v1, v2)
-                insight_summaries.append(f"**Vibration Variance:** Largest variance observed at station **{max_vel_st}**, with **{better}** running smoother (avg velocity {v_better:.2f} mm/s vs {v_worse:.2f} mm/s).")
+                insight_summaries.append(f"**Velocity Vibration Variance:** Largest variance observed at station **{max_vel_st}**, with **{better}** running smoother (avg velocity {v_better:.2f} mm/s vs {v_worse:.2f} mm/s).")
 
-    return compliance_summaries, diag_summaries, insight_summaries
+    return compliance_summaries, insight_summaries
 
 
 # ==========================================
@@ -835,7 +829,7 @@ def compare_spindle_velocity(df1, df2, name1, name2):
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.grid(True, alpha=0.2, axis='y', color=THEME_GRAY)
-    ax.set_title(f'Spindle Velocity Comparison\n{name1} vs {name2}')
+    ax.set_title(f'Spindle Velocity Vibration Comparison\n{name1} vs {name2}')
     ax.set_xticks(x)
     ax.set_xticklabels(all_stations, rotation=45, ha='right')
     ax.legend(loc='upper left', frameon=True, facecolor='white', edgecolor='none')
@@ -891,7 +885,7 @@ def compare_spindle_acceleration(df1, df2, name1, name2):
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.grid(True, alpha=0.2, axis='y', color=THEME_GRAY)
-    ax.set_title(f'Spindle Acceleration Comparison\n{name1} vs {name2}')
+    ax.set_title(f'Spindle Acceleration Vibration Comparison\n{name1} vs {name2}')
     ax.set_xticks(x)
     ax.set_xticklabels(all_stations, rotation=45, ha='right')
     ax.legend(frameon=True, facecolor='white', edgecolor='none')
@@ -1087,9 +1081,9 @@ def main():
             stations1 = int(df1[cnc_col1].nunique()) if cnc_col1 else 0
             stations2 = int(df2[cnc_col2].nunique()) if cnc_col2 else 0
             
-            # --- New: Calculate Grade A Rate and get Diagnosis ---
-            ga_count1, total_mac1, gb_details1 = calculate_factory_grade_a_rate(df1, factory1_name)
-            ga_count2, total_mac2, gb_details2 = calculate_factory_grade_a_rate(df2, factory2_name)
+            # Extract Grade A Rate and Perfect Stations
+            ga_count1, total_mac1, _, perf_st1 = calculate_factory_grade_a_rate(df1, factory1_name)
+            ga_count2, total_mac2, _, perf_st2 = calculate_factory_grade_a_rate(df2, factory2_name)
             
             ga_rate1 = (ga_count1 / total_mac1 * 100) if total_mac1 > 0 else 0
             ga_rate2 = (ga_count2 / total_mac2 * 100) if total_mac2 > 0 else 0
@@ -1104,19 +1098,19 @@ def main():
             with metric_cols[3]: 
                 display_animated_metric(f"Factory {factory2_name} - Grade A Rate", f"{ga_rate2:.1f}%", f"{ga_count2} / {total_mac2} machines", animation_delay=0.3)
             
-            # 简要提示哪些工站包含 Grade B (如果有的话)
+            # Show 100% Grade A Stations
             col_info1, col_info2 = st.columns(2)
             with col_info1:
-                if gb_details1:
-                    st.info(f"**Stations with Grade B machines:** {', '.join(gb_details1.keys())}")
+                st_list1 = ', '.join(perf_st1) if perf_st1 else 'None'
+                st.info(f"**Stations with 100% Grade A machines:** {st_list1}")
             with col_info2:
-                if gb_details2:
-                    st.info(f"**Stations with Grade B machines:** {', '.join(gb_details2.keys())}")
+                st_list2 = ', '.join(perf_st2) if perf_st2 else 'None'
+                st.info(f"**Stations with 100% Grade A machines:** {st_list2}")
 
             # --- Render Executive Summary ---
-            comp_sums, diag_sums, insight_sums = generate_executive_summary(df1, df2, factory1_name, factory2_name, gb_details1, gb_details2)
+            comp_sums, insight_sums = generate_executive_summary(df1, df2, factory1_name, factory2_name)
             
-            if comp_sums or insight_sums or diag_sums:
+            if comp_sums or insight_sums:
                 summary_html = f"<div class='animate-fade-in-up' style='background: linear-gradient(to right, rgba(155, 176, 226, 0.08), rgba(205, 180, 219, 0.08)); border-radius: 12px; border-left: 6px solid {THEME_PURPLE}; padding: 20px 30px; margin: 30px 0 25px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.03);'>"
                 summary_html += "<h2 style='margin-top: 0; color: #3d4451; font-size: 22px; margin-bottom: 15px;'>💡 Executive Summary</h2>"
                 
@@ -1124,14 +1118,6 @@ def main():
                     summary_html += "<h3 style='color: #4b5563; font-size: 16px; margin-top: 10px; margin-bottom: 10px; border-bottom: 1px solid #eaeaea; padding-bottom: 5px;'>🎯 Compliance & Grade Status</h3>"
                     summary_html += "<ul style='margin-bottom: 20px; color: #4b5563; font-size: 15px; line-height: 1.8;'>"
                     for s in comp_sums:
-                        s_html = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color: #2d3748;">\1</strong>', s)
-                        summary_html += f"<li>{s_html}</li>"
-                    summary_html += "</ul>"
-                    
-                if diag_sums:
-                    summary_html += "<h3 style='color: #4b5563; font-size: 16px; margin-top: 15px; margin-bottom: 10px; border-bottom: 1px solid #eaeaea; padding-bottom: 5px;'>🩺 Grade B Diagnosis Details</h3>"
-                    summary_html += "<ul style='margin-bottom: 20px; color: #4b5563; font-size: 15px; line-height: 1.8;'>"
-                    for s in diag_sums:
                         s_html = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color: #2d3748;">\1</strong>', s)
                         summary_html += f"<li>{s_html}</li>"
                     summary_html += "</ul>"
@@ -1155,8 +1141,8 @@ def main():
                 ("Machine Type Count Comparison", compare_machine_count, "📋 View Detailed Machine Models per Station"),
                 ("Machine Age Comparison", compare_machine_age, None),
                 ("Spindle Runout Comparison", compare_spindle_runout, None),
-                ("Spindle Velocity Comparison", compare_spindle_velocity, None),
-                ("Spindle Acceleration Comparison", compare_spindle_acceleration, None),
+                ("Spindle Velocity Vibration Comparison", compare_spindle_velocity, None),
+                ("Spindle Acceleration Vibration Comparison", compare_spindle_acceleration, None),
                 ("Marble Squareness Comparison", compare_marble_squareness_combined, None)
             ]
             
