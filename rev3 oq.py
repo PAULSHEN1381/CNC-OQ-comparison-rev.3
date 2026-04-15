@@ -672,7 +672,7 @@ def generate_executive_summary(df1, df2, name1, name2):
             v_better, v_worse = min(age1, age2), max(age1, age2)
             insight_summaries.append(f"**Age Profile:** **{better}** has newer equipment on average ({v_better:.1f} yrs vs {v_worse:.1f} yrs).")
 
-# 6. Comparative Insights (Difference / Gap)
+    # 6. Comparative Insights (Difference / Gap)
     if cnc_col1 and cnc_col2:
         def get_sq_by_station(df, cnc_col):
             sq_cols = [c for c in df.columns if 'squareness' in str(c).lower() or '垂直度' in str(c)]
@@ -743,8 +743,8 @@ def generate_executive_summary(df1, df2, name1, name2):
                 # 同理优化了振动的话术
                 insight_summaries.append(f"**Velocity Vibration Gap:** The largest performance gap is observed at station **{max_vel_st}**, with **{better}** running smoother (avg velocity {v_better:.2f} mm/s vs {v_worse:.2f} mm/s).")
 
-    
-
+    # 👇 就是这一句刚才可能被误删了，请务必保留它！(注意缩进，它和 if cnc_col1 and cnc_col2: 齐平)
+    return compliance_summaries, insight_summaries
 # ==========================================
 # Chart Generation Functions
 # ==========================================
