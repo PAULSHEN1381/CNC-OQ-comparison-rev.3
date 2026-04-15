@@ -1,4 +1,3 @@
-# file name: app_streamlit_animated.py
 # Factory Machine Tool Precision Comparison Analysis System - Streamlit Version with Animations
 
 import streamlit as st
@@ -105,41 +104,38 @@ def add_custom_css():
     
     /* 🍎 Apple Home Button Style for Start Analysis */
     div.stButton > button[kind="primary"] {
-        /* 白色背景与银色金属渐变边框 */
         background: linear-gradient(#ffffff, #ffffff) padding-box,
                     linear-gradient(145deg, #f0f0f3, #a1a1a6, #f0f0f3, #d1d1d6) border-box !important;
         border: 4px solid transparent !important;
-        border-radius: 50px !important; /* 胶囊形状 */
-        color: #1d1d1f !important; /* 苹果深灰色字体 */
+        border-radius: 50px !important; 
+        color: #1d1d1f !important; 
         padding: 12px 24px !important;
         box-shadow: 
-            0 6px 16px rgba(0, 0, 0, 0.06), /* 柔和外阴影 */
-            inset 0 -2px 6px rgba(0, 0, 0, 0.04), /* 底部内嵌微小阴影营造立体感 */
-            inset 0 2px 4px rgba(255, 255, 255, 0.8) !important; /* 顶部高光 */
-        transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1) !important; /* Q弹的动画 */
+            0 6px 16px rgba(0, 0, 0, 0.06), 
+            inset 0 -2px 6px rgba(0, 0, 0, 0.04), 
+            inset 0 2px 4px rgba(255, 255, 255, 0.8) !important; 
+        transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1) !important; 
     }
     
     div.stButton > button[kind="primary"]:hover {
-        transform: scale(0.97) !important; /* 鼠标悬浮时产生"按下"物理按键的错觉 */
+        transform: scale(0.97) !important; 
         box-shadow: 
             0 2px 8px rgba(0, 0, 0, 0.04), 
             inset 0 -1px 3px rgba(0, 0, 0, 0.02),
             inset 0 2px 4px rgba(255, 255, 255, 0.8) !important;
-        /* 边框金属反光加深 */
         background: linear-gradient(#fdfdfd, #fdfdfd) padding-box,
                     linear-gradient(145deg, #d1d1d6, #8e8e93, #d1d1d6, #bcbcc0) border-box !important;
     }
     
     div.stButton > button[kind="primary"]:active {
-        transform: scale(0.94) !important; /* 点击时压得更深 */
+        transform: scale(0.94) !important; 
         background: linear-gradient(#f4f4f4, #f4f4f4) padding-box,
                     linear-gradient(145deg, #bcbcc0, #7c7c80, #bcbcc0, #a1a1a6) border-box !important;
     }
     
-    /* 让按钮内部的字体更粗一点 */
     div.stButton > button[kind="primary"] p {
         font-size: 18px !important;
-        font-weight: 600 !important; /* 苹方字体常用的半粗体 */
+        font-weight: 600 !important; 
         color: #1d1d1f !important;
     }
 
@@ -456,7 +452,7 @@ def generate_executive_summary(df1, df2, name1, name2):
     r_comp2 = check_runout(near2, far2)
     if "No Data" not in r_comp1 or "No Data" not in r_comp2:
         compliance_summaries.append(f"**Spindle Runout:** **{name1}** is {r_comp1} | **{name2}** is {r_comp2}")
-        
+
     # 2. Velocity Vibration (All Stations)
     def check_all_station_velocity_vib(df, name):
         cnc_col = get_cnc_column_name(df)
@@ -500,7 +496,6 @@ def generate_executive_summary(df1, df2, name1, name2):
         
         if not has_data: return "No Data", 0, []
         
-        # 修正：补充了 for 循环推导式
         issue_details = []
         if station_oos_counts:
             issue_details.extend([f"{st} (x{cnt} OOS)" for st, cnt in station_oos_counts.items()])
@@ -561,7 +556,6 @@ def generate_executive_summary(df1, df2, name1, name2):
             
         if not has_data: return "No Data", 0, []
         
-        # 修正：补充了 for 循环推导式
         issue_details = []
         if station_oos_counts:
             issue_details.extend([f"{st} (x{cnt} OOS)" for st, cnt in station_oos_counts.items()])
@@ -587,7 +581,8 @@ def generate_executive_summary(df1, df2, name1, name2):
         msg += f" | **{name2}** achieves {vacc_comp2}"
         if vacc_issues2: msg += f" (Issues at: {', '.join(vacc_issues2)})"
         compliance_summaries.append(msg)
-  
+
+
     # 4. Squareness Compliance (Station-based diagnostic generation)
     def analyze_squareness_compliance(df, cnc_col):
         if not cnc_col: return "No Data", []
@@ -672,7 +667,7 @@ def generate_executive_summary(df1, df2, name1, name2):
             v_better, v_worse = min(age1, age2), max(age1, age2)
             insight_summaries.append(f"**Age Profile:** **{better}** has newer equipment on average ({v_better:.1f} yrs vs {v_worse:.1f} yrs).")
 
-    # 6. Comparative Insights (Difference / Gap)
+    # 6. Comparative Insights (Gap / Difference)
     if cnc_col1 and cnc_col2:
         def get_sq_by_station(df, cnc_col):
             sq_cols = [c for c in df.columns if 'squareness' in str(c).lower() or '垂直度' in str(c)]
@@ -700,7 +695,6 @@ def generate_executive_summary(df1, df2, name1, name2):
                 v1, v2 = sq1_st[max_sq_st], sq2_st[max_sq_st]
                 better, worse = (name1, name2) if v1 < v2 else (name2, name1)
                 v_better, v_worse = min(v1, v2), max(v1, v2)
-                # 优化了话术：将 Variance 改为 Gap，将 better geometry 改为 higher precision
                 insight_summaries.append(f"**Marble Squareness Gap:** The largest performance gap between the two lines is at station **{max_sq_st}**, where **{better}** achieves higher precision (avg deviation {v_better:.1f} μm vs {v_worse:.1f} μm).")
 
         def extract_vel_mean_all_stations(df):
@@ -740,11 +734,11 @@ def generate_executive_summary(df1, df2, name1, name2):
                 v1, v2 = vel1_st[max_vel_st], vel2_st[max_vel_st]
                 better, worse = (name1, name2) if v1 < v2 else (name2, name1)
                 v_better, v_worse = min(v1, v2), max(v1, v2)
-                # 同理优化了振动的话术
                 insight_summaries.append(f"**Velocity Vibration Gap:** The largest performance gap is observed at station **{max_vel_st}**, with **{better}** running smoother (avg velocity {v_better:.2f} mm/s vs {v_worse:.2f} mm/s).")
 
-    # 👇 就是这一句刚才可能被误删了，请务必保留它！(注意缩进，它和 if cnc_col1 and cnc_col2: 齐平)
     return compliance_summaries, insight_summaries
+
+
 # ==========================================
 # Chart Generation Functions
 # ==========================================
@@ -949,7 +943,6 @@ def compare_spindle_velocity(df1, df2, name1, name2):
         
         extracted_data = {}
         rpm_priority = [18000] if read_mode == 'ipeg' else [18000, 16000, 10000]
-        # Remove target_stations filter, use all unique stations
         for station in df[cnc_col_actual].dropna().unique():
             station_df = df[df[cnc_col_actual] == station]
             selected_col, selected_rpm = None, None
@@ -1022,7 +1015,6 @@ def compare_spindle_acceleration(df1, df2, name1, name2):
         if cnc_col_actual is None: return {}
         acc_cols = [c for c in df.columns if 'Acceleration' in str(c) and 'Spindle' in str(c)]
         data = {}
-        # Remove target_stations filter, use all unique stations
         for station in df[cnc_col_actual].dropna().unique():
             station_df = df[df[cnc_col_actual] == station]
             vals = []
@@ -1306,7 +1298,7 @@ def main():
                     summary_html += "</ul>"
                     
                 if insight_sums:
-                    summary_html += "<h3 style='color: #4b5563; font-size: 16px; margin-top: 15px; margin-bottom: 10px; border-bottom: 1px solid #eaeaea; padding-bottom: 5px;'>📊 Comparative Insights (Variance by Station)</h3>"
+                    summary_html += "<h3 style='color: #4b5563; font-size: 16px; margin-top: 15px; margin-bottom: 10px; border-bottom: 1px solid #eaeaea; padding-bottom: 5px;'>📊 Comparative Insights</h3>"
                     summary_html += "<ul style='margin-bottom: 0; color: #4b5563; font-size: 15px; line-height: 1.8;'>"
                     for s in insight_sums:
                         s_html = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color: #2d3748;">\1</strong>', s)
