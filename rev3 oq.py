@@ -456,8 +456,8 @@ def generate_executive_summary(df1, df2, name1, name2):
     r_comp2 = check_runout(near2, far2)
     if "No Data" not in r_comp1 or "No Data" not in r_comp2:
         compliance_summaries.append(f"**Spindle Runout:** **{name1}** is {r_comp1} | **{name2}** is {r_comp2}")
-
-   # 2. Velocity Vibration (All Stations)
+        
+    # 2. Velocity Vibration (All Stations)
     def check_all_station_velocity_vib(df, name):
         cnc_col = get_cnc_column_name(df)
         if not cnc_col: return "No Data", 0, []
@@ -489,7 +489,7 @@ def generate_executive_summary(df1, df2, name1, name2):
                     current_max = vals.max()
                     if current_max > max_v: max_v = current_max
                     
-                    # 修正：逐台机评估，而不是求平均值
+                    # 逐台机评估，而不是求平均值
                     gb_count = ((vals > 1.1) & (vals <= 1.8)).sum()
                     oos_count = (vals > 1.8).sum()
                     
@@ -500,12 +500,12 @@ def generate_executive_summary(df1, df2, name1, name2):
         
         if not has_data: return "No Data", 0, []
         
-        # 收集具体数量信息
+        # 修正：补充了 for 循环推导式
         issue_details = []
         if station_oos_counts:
-            issue_details.extend([f"{st} (x{cnt} OOS)"])
+            issue_details.extend([f"{st} (x{cnt} OOS)" for st, cnt in station_oos_counts.items()])
         if station_gb_counts:
-            issue_details.extend([f"{st} (x{cnt} Grade B)"])
+            issue_details.extend([f"{st} (x{cnt} Grade B)" for st, cnt in station_gb_counts.items()])
             
         status = ""
         if station_oos_counts:
@@ -550,7 +550,7 @@ def generate_executive_summary(df1, df2, name1, name2):
                 current_max = vals_arr.max()
                 if current_max > max_a: max_a = current_max
                 
-                # 修正：逐台机评估，而不是求平均值
+                # 逐台机评估，而不是求平均值
                 gb_count = ((vals_arr > 10.0) & (vals_arr <= 15.0)).sum()
                 oos_count = (vals_arr > 15.0).sum()
                 
@@ -561,11 +561,12 @@ def generate_executive_summary(df1, df2, name1, name2):
             
         if not has_data: return "No Data", 0, []
         
+        # 修正：补充了 for 循环推导式
         issue_details = []
         if station_oos_counts:
-            issue_details.extend([f"{st} (x{cnt} OOS)"])
+            issue_details.extend([f"{st} (x{cnt} OOS)" for st, cnt in station_oos_counts.items()])
         if station_gb_counts:
-            issue_details.extend([f"{st} (x{cnt} Grade B)"])
+            issue_details.extend([f"{st} (x{cnt} Grade B)" for st, cnt in station_gb_counts.items()])
             
         status = ""
         if station_oos_counts:
@@ -586,7 +587,7 @@ def generate_executive_summary(df1, df2, name1, name2):
         msg += f" | **{name2}** achieves {vacc_comp2}"
         if vacc_issues2: msg += f" (Issues at: {', '.join(vacc_issues2)})"
         compliance_summaries.append(msg)
-
+  
     # 4. Squareness Compliance (Station-based diagnostic generation)
     def analyze_squareness_compliance(df, cnc_col):
         if not cnc_col: return "No Data", []
