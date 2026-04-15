@@ -672,7 +672,7 @@ def generate_executive_summary(df1, df2, name1, name2):
             v_better, v_worse = min(age1, age2), max(age1, age2)
             insight_summaries.append(f"**Age Profile:** **{better}** has newer equipment on average ({v_better:.1f} yrs vs {v_worse:.1f} yrs).")
 
-    # 6. Comparative Insights (Variance)
+# 6. Comparative Insights (Difference / Gap)
     if cnc_col1 and cnc_col2:
         def get_sq_by_station(df, cnc_col):
             sq_cols = [c for c in df.columns if 'squareness' in str(c).lower() or '垂直度' in str(c)]
@@ -700,7 +700,8 @@ def generate_executive_summary(df1, df2, name1, name2):
                 v1, v2 = sq1_st[max_sq_st], sq2_st[max_sq_st]
                 better, worse = (name1, name2) if v1 < v2 else (name2, name1)
                 v_better, v_worse = min(v1, v2), max(v1, v2)
-                insight_summaries.append(f"**Squareness Variance:** Largest variance found at station **{max_sq_st}**, where **{better}** has better geometry (avg deviation {v_better:.1f} μm vs {v_worse:.1f} μm).")
+                # 优化了话术：将 Variance 改为 Gap，将 better geometry 改为 higher precision
+                insight_summaries.append(f"**Marble Squareness Gap:** The largest performance gap between the two lines is at station **{max_sq_st}**, where **{better}** achieves higher precision (avg deviation {v_better:.1f} μm vs {v_worse:.1f} μm).")
 
         def extract_vel_mean_all_stations(df):
             cnc_col_actual = get_cnc_column_name(df)
@@ -739,10 +740,10 @@ def generate_executive_summary(df1, df2, name1, name2):
                 v1, v2 = vel1_st[max_vel_st], vel2_st[max_vel_st]
                 better, worse = (name1, name2) if v1 < v2 else (name2, name1)
                 v_better, v_worse = min(v1, v2), max(v1, v2)
-                insight_summaries.append(f"**Velocity Vibration Variance:** Largest variance observed at station **{max_vel_st}**, with **{better}** running smoother (avg velocity {v_better:.2f} mm/s vs {v_worse:.2f} mm/s).")
+                # 同理优化了振动的话术
+                insight_summaries.append(f"**Velocity Vibration Gap:** The largest performance gap is observed at station **{max_vel_st}**, with **{better}** running smoother (avg velocity {v_better:.2f} mm/s vs {v_worse:.2f} mm/s).")
 
-    return compliance_summaries, insight_summaries
-
+    
 
 # ==========================================
 # Chart Generation Functions
