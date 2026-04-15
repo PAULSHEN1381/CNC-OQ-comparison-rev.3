@@ -457,14 +457,18 @@ def generate_executive_summary(df1, df2, name1, name2):
     if "No Data" not in r_comp1 or "No Data" not in r_comp2:
         compliance_summaries.append(f"**Spindle Runout:** **{name1}** is {r_comp1} | **{name2}** is {r_comp2}")
 
-    # 2. Velocity Vibration (All Stations)
+   # 2. Velocity Vibration (All Stations)
     def check_all_station_velocity_vib(df, name):
         cnc_col = get_cnc_column_name(df)
         if not cnc_col: return "No Data", 0, []
         read_mode = 'ipeg' if name.lower().startswith('ipeg') else 'default'
         rpm_priority = [18000] if read_mode == 'ipeg' else [18000, 16000, 10000]
         
-        st_data = {}
+        station_gb_counts = defaultdict(int)
+        station_oos_counts = defaultdict(int)
+        max_v = 0
+        has_data = False
+        
         for station in df[cnc_col].dropna().unique():
             station_df = df[df[cnc_col] == station]
             selected_col = None
@@ -477,34 +481,50 @@ def generate_executive_summary(df1, df2, name1, name2):
                             selected_col = col
                             break
                 if selected_col: break
+                
             if selected_col:
                 vals = pd.to_numeric(station_df[selected_col], errors='coerce').dropna()
-                if len(vals) > 0: st_data[station] = np.mean(vals)
+                if len(vals) > 0:
+                    has_data = True
+                    current_max = vals.max()
+                    if current_max > max_v: max_v = current_max
+                    
+                    # 修正：逐台机评估，而不是求平均值
+                    gb_count = ((vals > 1.1) & (vals <= 1.8)).sum()
+                    oos_count = (vals > 1.8).sum()
+                    
+                    if oos_count > 0:
+                        station_oos_counts[station] += oos_count
+                    if gb_count > 0:
+                        station_gb_counts[station] += gb_count
         
-        if not st_data: return "No Data", 0, []
+        if not has_data: return "No Data", 0, []
         
-        max_v = max(st_data.values())
-        grade_b_stations = [st for st, val in st_data.items() if 1.1 < val <= 1.8]
-        out_spec_stations = [st for st, val in st_data.items() if val > 1.8]
-        
+        # 收集具体数量信息
+        issue_details = []
+        if station_oos_counts:
+            issue_details.extend([f"{st} (x{cnt} OOS)"])
+        if station_gb_counts:
+            issue_details.extend([f"{st} (x{cnt} Grade B)"])
+            
         status = ""
-        if out_spec_stations:
+        if station_oos_counts:
             status = f"<span style='color: {THEME_RED}; font-weight: bold;'>Out of Spec</span>"
-        elif grade_b_stations:
+        elif station_gb_counts:
             status = f"<span style='color: {THEME_ORANGE}; font-weight: bold;'>Grade B</span>"
         else:
             status = f"<span style='color: {THEME_GREEN}; font-weight: bold;'>Grade A</span>"
             
-        return status, max_v, grade_b_stations
+        return status, max_v, issue_details
 
-    vvel_comp1, vvel_max1, vvel_gb1 = check_all_station_velocity_vib(df1, name1)
-    vvel_comp2, vvel_max2, vvel_gb2 = check_all_station_velocity_vib(df2, name2)
+    vvel_comp1, vvel_max1, vvel_issues1 = check_all_station_velocity_vib(df1, name1)
+    vvel_comp2, vvel_max2, vvel_issues2 = check_all_station_velocity_vib(df2, name2)
     
     if vvel_max1 > 0 or vvel_max2 > 0:
         msg = f"**Spindle Velocity Vibration:** **{name1}** achieves {vvel_comp1}"
-        if vvel_gb1: msg += f" (Grade B at {', '.join(vvel_gb1)})"
+        if vvel_issues1: msg += f" (Issues at: {', '.join(vvel_issues1)})"
         msg += f" | **{name2}** achieves {vvel_comp2}"
-        if vvel_gb2: msg += f" (Grade B at {', '.join(vvel_gb2)})"
+        if vvel_issues2: msg += f" (Issues at: {', '.join(vvel_issues2)})"
         compliance_summaries.append(msg)
 
     # 3. Acceleration Vibration (All Stations)
@@ -512,7 +532,10 @@ def generate_executive_summary(df1, df2, name1, name2):
         cnc_col = get_cnc_column_name(df)
         if not cnc_col: return "No Data", 0, []
         
-        st_data = {}
+        station_gb_counts = defaultdict(int)
+        station_oos_counts = defaultdict(int)
+        max_a = 0
+        has_data = False
         acc_cols = [c for c in df.columns if 'Acceleration' in str(c) and 'Spindle' in str(c)]
         
         for station in df[cnc_col].dropna().unique():
@@ -520,34 +543,49 @@ def generate_executive_summary(df1, df2, name1, name2):
             vals = []
             for col in acc_cols:
                 vals.extend(pd.to_numeric(station_df[col], errors='coerce').dropna().tolist())
-            if vals: st_data[station] = np.mean(vals)
             
-        if not st_data: return "No Data", 0, []
+            if vals: 
+                has_data = True
+                vals_arr = np.array(vals)
+                current_max = vals_arr.max()
+                if current_max > max_a: max_a = current_max
+                
+                # 修正：逐台机评估，而不是求平均值
+                gb_count = ((vals_arr > 10.0) & (vals_arr <= 15.0)).sum()
+                oos_count = (vals_arr > 15.0).sum()
+                
+                if oos_count > 0:
+                    station_oos_counts[station] += oos_count
+                if gb_count > 0:
+                    station_gb_counts[station] += gb_count
+            
+        if not has_data: return "No Data", 0, []
         
-        max_a = max(st_data.values())
-        grade_b_stations = [st for st, val in st_data.items() if 10.0 < val <= 15.0]
-        out_spec_stations = [st for st, val in st_data.items() if val > 15.0]
-        
+        issue_details = []
+        if station_oos_counts:
+            issue_details.extend([f"{st} (x{cnt} OOS)"])
+        if station_gb_counts:
+            issue_details.extend([f"{st} (x{cnt} Grade B)"])
+            
         status = ""
-        if out_spec_stations:
+        if station_oos_counts:
             status = f"<span style='color: {THEME_RED}; font-weight: bold;'>Out of Spec</span>"
-        elif grade_b_stations:
+        elif station_gb_counts:
             status = f"<span style='color: {THEME_ORANGE}; font-weight: bold;'>Grade B</span>"
         else:
             status = f"<span style='color: {THEME_GREEN}; font-weight: bold;'>Grade A</span>"
             
-        return status, max_a, grade_b_stations
+        return status, max_a, issue_details
 
-    vacc_comp1, vacc_max1, vacc_gb1 = check_all_station_accel_vib(df1)
-    vacc_comp2, vacc_max2, vacc_gb2 = check_all_station_accel_vib(df2)
+    vacc_comp1, vacc_max1, vacc_issues1 = check_all_station_accel_vib(df1)
+    vacc_comp2, vacc_max2, vacc_issues2 = check_all_station_accel_vib(df2)
 
     if vacc_max1 > 0 or vacc_max2 > 0:
         msg = f"**Spindle Acceleration Vibration:** **{name1}** achieves {vacc_comp1}"
-        if vacc_gb1: msg += f" (Grade B at {', '.join(vacc_gb1)})"
+        if vacc_issues1: msg += f" (Issues at: {', '.join(vacc_issues1)})"
         msg += f" | **{name2}** achieves {vacc_comp2}"
-        if vacc_gb2: msg += f" (Grade B at {', '.join(vacc_gb2)})"
+        if vacc_issues2: msg += f" (Issues at: {', '.join(vacc_issues2)})"
         compliance_summaries.append(msg)
-
 
     # 4. Squareness Compliance (Station-based diagnostic generation)
     def analyze_squareness_compliance(df, cnc_col):
