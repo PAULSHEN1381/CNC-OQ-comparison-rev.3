@@ -1191,18 +1191,16 @@ def main():
     
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown('<div class="animate-fade-in-left">', unsafe_allow_html=True)
+        # 删除了原生 div 包裹，防止 React DOM 崩溃
         st.subheader("🏭 Line A")
         file1 = st.file_uploader("Upload Excel file", type=['xlsx', 'xls'], key="file1")
         if file1: st.success(f"✅ Uploaded: {file1.name}")
-        st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
-        st.markdown('<div class="animate-fade-in-right">', unsafe_allow_html=True)
+        # 删除了原生 div 包裹，防止 React DOM 崩溃
         st.subheader("🏭 Line B")
         file2 = st.file_uploader("Upload Excel file", type=['xlsx', 'xls'], key="file2")
         if file2: st.success(f"✅ Uploaded: {file2.name}")
-        st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown("---")
     
